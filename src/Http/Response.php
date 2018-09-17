@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Swoole+ Framework (https://slimframework.com)
  *
@@ -26,6 +27,13 @@ use Sinpe\Swoole\Http\HeadersInterface;
  */
 class Response extends Message implements ResponseInterface
 {
+    /**
+     * the response
+     *
+     * @var \swoole_http_response
+     */
+    protected $response;
+
     /**
      * Status code
      *
@@ -122,7 +130,7 @@ class Response extends Message implements ResponseInterface
      *
      * @var string
      */
-     const EOL = "\r\n";
+    const EOL = "\r\n";
 
     /**
      * Create new HTTP response.
@@ -131,8 +139,14 @@ class Response extends Message implements ResponseInterface
      * @param HeadersInterface|null $headers The response headers.
      * @param StreamInterface|null  $body    The response body.
      */
-    public function __construct($status = 200, HeadersInterface $headers = null, StreamInterface $body = null)
-    {
+    public function __construct(
+        \swoole_http_response $response,
+        $status = 200,
+        HeadersInterface $headers = null,
+        StreamInterface $body = null
+    ) {
+        $this->response = $response;
+        
         $this->status = $this->filterStatus($status);
         $this->headers = $headers ? $headers : new Headers();
         $this->body = $body ? $body : new Body(fopen('php://temp', 'r+'));
@@ -218,7 +232,7 @@ class Response extends Message implements ResponseInterface
      */
     protected function filterStatus($status)
     {
-        if (!is_integer($status) || $status<100 || $status>599) {
+        if (!is_integer($status) || $status < 100 || $status > 599) {
             throw new InvalidArgumentException('Invalid HTTP status code');
         }
 

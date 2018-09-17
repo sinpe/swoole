@@ -35,9 +35,7 @@ use Sinpe\Swoole\Http\Uri;
 use Sinpe\Swoole\Http\Headers;
 use Sinpe\Swoole\Http\Body;
 use Sinpe\Swoole\Http\Request;
-use Sinpe\Swoole\Http\EnvironmentInterface;
 use Sinpe\Swoole\LogAwareTrait;
-use Sinpe\Slim\Exception;
 
 /**
  * App
@@ -58,13 +56,10 @@ class HttpServer extends Server
     /**
      * __construct
      *
-     * @param EnvironmentInterface $environment
-     * 
      * @throws InvalidArgumentException when no container is provided that implements ContainerInterface
      */
-    final public function __construct(
-        EnvironmentInterface $environment
-    ) {
+    public function __construct()
+    {
         // set_exception_handler(
         //     function ($e) use ($request, $response) {
         //         $response = $this->handleException($e, $request, $response);
@@ -72,7 +67,7 @@ class HttpServer extends Server
         //     }
         // );
 
-        parent::__construct($environment);
+        parent::__construct(Server::TYPE_HTTP);
 
         $this->registerRoutes();
     }
@@ -285,47 +280,28 @@ class HttpServer extends Server
      */
     public function run($silent = false)
     {
-        if (
-            $this->serverType() != Server::TYPE_WEB_SERVER && 
-            $this->serverType() != Server::TYPE_WEB_SOCKET_SERVER
-        ) {
-            throw new Exception(
-                i18n(
-                    'Server type must be %s or %s.',
-                    Server::TYPE_WEB_SERVER,
-                    Server::TYPE_WEB_SOCKET_SERVER
-                )
-            );
-        }
-
         // $dispatcher = new Dispatcher($controllerNameSpace);
 
         $register->set(
             $register::onRequest,
-            function (\swoole_http_request $request, \swoole_http_response $response)use($dispatcher) {
+            function (\swoole_http_request $request, \swoole_http_response $response) use ($dispatcher) {
 
-                // $request_psr = new Request($request);
-                // $response_psr = new Response($response);
+                $request = new Request($request);
+                $response = new Response($response);
+                
+                // 每个请求进来都先执行这个方法 可以作为权限验证 前置请求记录等
+                $request->withAttribute('requestTime', microtime(true));
 
-                // try{
-                //     EasySwooleEvent::onRequest($request_psr,$response_psr);
-                //     $dispatcher->dispatch($request_psr,$response_psr);
-                //     EasySwooleEvent::afterAction($request_psr,$response_psr);
-                // } catch (\Throwable $throwable) {
-                //     $handler = Di::getInstance()->get(SysConst::HTTP_EXCEPTION_HANDLER);
-                //     if($handler instanceof ExceptionHandlerInterface){
-                //         $handler->handle($throwable,$request_psr,$response_psr);
-                //     }else{
-                //         $response_psr->withStatus(Status::CODE_INTERNAL_SERVER_ERROR);
-                //         $response_psr->write(nl2br($throwable->getMessage() ."\n". $throwable->getTraceAsString()));
-                //     }
-                // }
-                
-                // $response_psr->response();
-                
                 try {
                     ob_start();
+                    
                     $response = $this->process($request, $response);
+
+                    // 每个请求结束后都执行这个方法 可以作为后置日志等
+                    $start = $request->getAttribute('requestTime');
+                    // $spend = round(microtime(true) - $start, 3);
+                    // Logger::getInstance()->console("request :{$request->getUri()->getPath()} take {$spend}");
+
                 } catch (MethodInvalid $e) {
                     $response = $this->processInvalidMethod($e->getRequest(), $response);
                 }
@@ -740,6 +716,7 @@ class HttpServer extends Server
     protected function handlePhpError(Throwable $e, ServerRequestInterface $request, ResponseInterface $response)
     {
         $handler = 'phpErrorHandler';
+
         $params = [$request, $response, $e];
 
         if ($this->container->has($handler)) {

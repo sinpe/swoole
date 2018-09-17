@@ -35,7 +35,6 @@ use Sinpe\Swoole\Http\Uri;
 use Sinpe\Swoole\Http\Headers;
 use Sinpe\Swoole\Http\Body;
 use Sinpe\Swoole\Http\Request;
-use Sinpe\Swoole\Http\EnvironmentInterface;
 use Sinpe\Swoole\LogAwareTrait;
 
 /**
@@ -53,6 +52,11 @@ class Server
 {
     use LogAwareTrait;
 
+    const TYPE_SERVER = 1;
+
+    const TYPE_HTTP = 2;
+    const TYPE_WEB_SOCKET = 3;
+
     /**
      * Container
      *
@@ -61,11 +65,11 @@ class Server
     private $container;
 
     /**
-     * Environment
+     * 服务器类型
      *
-     * @var EnvironmentInterface
+     * @var string
      */
-    private $environment;
+    private $serverType;
 
     /**
      * 运行参数
@@ -74,24 +78,20 @@ class Server
      */
     private $options;
 
-
     private $servers = [];
     private $mainServer = null;
     private $isStart = false;
 
-    const TYPE_SERVER = 1;
-    const TYPE_WEB_SERVER = 2;
-    const TYPE_WEB_SOCKET_SERVER = 3;
-
     /**
      * __construct
      *
-     * @param EnvironmentInterface $environment
-     * 
      * @throws InvalidArgumentException when no container is provided that implements ContainerInterface
      */
-    final public function __construct(EnvironmentInterface $environment) 
-    {
+    public function __construct(
+        string $serverType
+    ) {
+        $this->serverType = $serverType;
+
         // set_exception_handler(
         //     function ($e) use ($request, $response) {
         //         $response = $this->handleException($e, $request, $response);
@@ -100,8 +100,6 @@ class Server
         // );
 
         $this->showLogo();
-
-        $this->environment = $environment;
 
         $container = $this->generateContainer();
 
@@ -182,7 +180,7 @@ class Server
      */
     public function serverType()
     {
-        return !empty($this->options['server_type']) ? $this->options['server_type'] : self::TYPE_SERVER;
+        return $this->serverType;
     }
 
     /**
@@ -761,10 +759,10 @@ class Server
             case self::TYPE_SERVER:
                 $this->mainServer = new \swoole_server($host, $port, $runModel, $sockType);
                 break;
-            case self::TYPE_WEB_SERVER:
+            case self::TYPE_HTTP:
                 $this->mainServer = new \swoole_http_server($host, $port, $runModel, $sockType);
                 break;
-            case self::TYPE_WEB_SOCKET_SERVER:
+            case self::TYPE_WEB_SOCKET:
                 $this->mainServer = new \swoole_websocket_server($host, $port, $runModel, $sockType);
                 break;
             default:

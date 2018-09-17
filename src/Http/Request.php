@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Swoole+ Framework (https://slimframework.com)
  *
@@ -34,6 +35,13 @@ use Sinpe\Swoole\Http\HeadersInterface;
  */
 class Request extends Message implements ServerRequestInterface
 {
+    /**
+     * The request
+     *
+     * @var \swoole_http_request
+     */
+    protected $request;
+
     /**
      * The request method
      *
@@ -130,35 +138,6 @@ class Request extends Message implements ServerRequestInterface
     ];
 
     /**
-     * Create new HTTP request with data extracted from the application
-     * Environment object
-     *
-     * @param  Environment $environment The application Environment
-     *
-     * @return static
-     */
-    public static function createFromEnvironment(Environment $environment)
-    {
-        $method = $environment['REQUEST_METHOD'];
-        $uri = Uri::createFromEnvironment($environment);
-        $headers = Headers::createFromEnvironment($environment);
-        $cookies = Cookies::parseHeader($headers->get('Cookie', []));
-        $serverParams = $environment->all();
-        $body = new RequestBody();
-        $uploadedFiles = UploadedFile::createFromEnvironment($environment);
-
-        $request = new static($method, $uri, $headers, $cookies, $serverParams, $body, $uploadedFiles);
-
-        if ($method === 'POST' &&
-            in_array($request->getMediaType(), ['application/x-www-form-urlencoded', 'multipart/form-data'])
-        ) {
-            // parsed body must be $_POST
-            $request = $request->withParsedBody($_POST);
-        }
-        return $request;
-    }
-
-    /**
      * Create new HTTP request.
      *
      * Adds a host header when none was provided and a host is defined in uri.
@@ -172,15 +151,33 @@ class Request extends Message implements ServerRequestInterface
      * @param array            $uploadedFiles The request uploadedFiles collection
      * @throws MethodInvalid on invalid HTTP method
      */
-    public function __construct(
-        $method,
-        UriInterface $uri,
-        HeadersInterface $headers,
-        array $cookies,
-        array $serverParams,
-        StreamInterface $body,
-        array $uploadedFiles = []
-    ) {
+    public function __construct(\swoole_http_request $request)
+    {
+
+        $this->request = $request;
+
+        $environment = new Environment($request->server);
+
+        $method = $environment['REQUEST_METHOD'];
+
+        $uri = Uri::createFromEnvironment($environment);
+
+        $headers = Headers::createFromEnvironment($environment);
+
+        $cookies = Cookies::parseHeader($headers->get('Cookie', []));
+
+        $serverParams = $environment->all();
+
+        $body = new RequestBody();
+
+        $uploadedFiles = UploadedFile::createFromEnvironment($environment);
+
+        if ($method === 'POST' &&
+            in_array($this->getMediaType(), ['application/x-www-form-urlencoded', 'multipart/form-data'])) {
+            // parsed body must be $_POST
+            $this->bodyParsed = $request->post;
+        }
+
         try {
             $this->originalMethod = $this->filterMethod($method);
         } catch (MethodInvalid $e) {
@@ -1035,7 +1032,7 @@ class Request extends Message implements ServerRequestInterface
         // look for a media type with a structured syntax suffix (RFC 6839)
         $parts = explode('+', $mediaType);
         if (count($parts) >= 2) {
-            $mediaType = 'application/' . $parts[count($parts)-1];
+            $mediaType = 'application/' . $parts[count($parts) - 1];
         }
 
         if (isset($this->bodyParsers[$mediaType]) === true) {
