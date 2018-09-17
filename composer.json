@@ -32,5 +32,6 @@
         "psr-4": {
             "Sinpe\\Swoole\\": "src/"
         }
-    }
+    },
+    "minimum-stability": "dev"
 }
