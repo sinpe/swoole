@@ -15,16 +15,19 @@ use Exception;
 use InvalidArgumentException;
 use Throwable;
 
+use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Message\ResponseInterface;
+
+use Sinpe\IOC\ContainerInterface;
+use Sinpe\Middleware\CallableStrategies\Deferred as DeferredCallable;
+use Sinpe\Middleware\HttpAwareTrait;
 use Sinpe\Route\GroupInterface;
 use Sinpe\Route\RouteInterface;
 use Sinpe\Route\RouterInterface;
+use Sinpe\Route\Dispatcher;
 
 use Sinpe\Swoole\Exceptions\MethodInvalid;
 use Sinpe\Swoole\Http\Response;
-use Psr\Http\Message\ServerRequestInterface;
-use Psr\Http\Message\ResponseInterface;
-use Sinpe\IOC\ContainerInterface;
-use FastRoute\Dispatcher;
 use Sinpe\Swoole\Exception as SwooleException;
 use Sinpe\Swoole\Exceptions\MethodNotAllowed;
 use Sinpe\Swoole\Exceptions\RouteNotFound;
@@ -33,26 +36,22 @@ use Sinpe\Swoole\Http\Headers;
 use Sinpe\Swoole\Http\Body;
 use Sinpe\Swoole\Http\Request;
 use Sinpe\Swoole\Http\EnvironmentInterface;
-use Sinpe\Middleware\CallableStrategies\Deferred as DeferredCallable;
-use Sinpe\Middleware\HttpAwareTrait;
 use Sinpe\Swoole\LogAwareTrait;
 
 /**
  * App
  *
- * This is the primary class with which you instantiate,
- * configure, and run a Swoole+ Framework application.
- * The \Sinpe\Swoole\Application class also accepts Swoole+ Framework middleware.
+ * This is the primary class with which you instantiate and run a application.
+ * The \Sinpe\Swoole\Server class also accepts middlewares and router.
  *
  * @property-read callable $errorHandler
  * @property-read callable $phpErrorHandler
  * @property-read callable $notFoundHandler function($request, $response)
  * @property-read callable $notAllowedHandler function($request, $response, $allowedHttpMethods)
  */
-class Application
+class Server
 {
     use LogAwareTrait;
-    use HttpAwareTrait;
 
     /**
      * Container
@@ -69,43 +68,40 @@ class Application
     private $environment;
 
     /**
-     * Request
+     * 运行参数
      *
-     * @var ServerRequestInterface
+     * @var array
      */
-    private $request;
+    private $options;
+
+
+    private $servers = [];
+    private $mainServer = null;
+    private $isStart = false;
+
+    const TYPE_SERVER = 1;
+    const TYPE_WEB_SERVER = 2;
+    const TYPE_WEB_SOCKET_SERVER = 3;
 
     /**
-     * Response
-     *
-     * @var ResponseInterface
-     */
-    private $response;
-
-    /**
-     * Constructor
+     * __construct
      *
      * @param EnvironmentInterface $environment
-     * @param ServerRequestInterface $request PSR-7 Request object
-     * @param ResponseInterface $response PSR-7 Response object
      * 
      * @throws InvalidArgumentException when no container is provided that implements ContainerInterface
      */
-    final public function __construct(
-        EnvironmentInterface $environment,
-        ServerRequestInterface $request,
-        ResponseInterface $response
-    ) {        
-        set_exception_handler(
-            function($e) use($request, $response) {
-                $response = $this->handleException($e, $request, $response);
-                $this->respond($response);
-            }
-        );
-        
+    final public function __construct(EnvironmentInterface $environment) 
+    {
+        // set_exception_handler(
+        //     function ($e) use ($request, $response) {
+        //         $response = $this->handleException($e, $request, $response);
+        //         $this->respond($response);
+        //     }
+        // );
+
+        $this->showLogo();
+
         $this->environment = $environment;
-        $this->request     = $request;
-        $this->response    = $response;
 
         $container = $this->generateContainer();
 
@@ -118,9 +114,100 @@ class Application
         // 生命周期函数initialize
         $this->initialize();
 
-        $this->registerRoutes();
+        $this->createServer();
+
+        // Cache::getInstance(); // TODO
+        // Cluster::getInstance()->run();// TODO
+        // CronTab::getInstance()->run();// TODO
+
+        $this->attachListener();
+
+        $this->isStart = true;
     }
-    
+
+    /**
+     * 
+     *
+     * @return void
+     */
+    public function setOptions(array $options = [])
+    {
+        $this->options = $options;
+    }
+
+    /**
+     * 应用名称
+     *
+     * @return void
+     */
+    public function name()
+    {
+        return !empty($this->options['name']) ? $this->options['name'] : 'unknow';
+    }
+
+    /**
+     * 主机
+     *
+     * @return void
+     */
+    public function host()
+    {
+        return !empty($this->options['host']) ? $this->options['host'] : '127.0.0.1';
+    }
+
+    /**
+     * 端口
+     *
+     * @return void
+     */
+    public function port()
+    {
+        return !empty($this->options['port']) ? $this->options['port'] : '8080';
+    }
+
+    /**
+     * worker数
+     *
+     * @return void
+     */
+    public function workerNum()
+    {
+        return !empty($this->options['worker_num']) ? $this->options['worker_num'] : 2;
+    }
+
+    /**
+     * Server Type
+     *
+     * @return void
+     */
+    public function serverType()
+    {
+        return !empty($this->options['server_type']) ? $this->options['server_type'] : self::TYPE_SERVER;
+    }
+
+    /**
+     * 创建swoole
+     *
+     * @return void
+     */
+    protected function createServer()
+    {
+        // TODO add options here
+        throw new Exception('Please override me and add options here.');
+
+        $this->createMainServer($options);
+    }
+
+    /**
+     * 打印logo
+     *
+     * @return void
+     */
+    protected function showLogo()
+    {
+        echo file_get_contents('../LOGO');
+    }
+
     /**
      * initialize
      * 
@@ -133,15 +220,6 @@ class Application
     }
 
     /**
-     * 初始化路由
-     *
-     * @return void
-     */
-    protected function registerRoutes()
-    {
-    }
-
-	/**
      * create container
      * 
      * 需要替换默认的container，覆盖此方法
@@ -163,221 +241,6 @@ class Application
         return $this->container;
     }
 
-    // 中间件相关
-    // --------------------------------------------------------------------------------------------
-
-    /**
-     * 添加中间件，调度时间点分在application的invoke之前或之后
-     *
-     * @param  callable|string    $callable The callback routine
-     *
-     * @return static
-     */
-    public function before($callable)
-    {
-        return $this->pushToBefore(new DeferredCallable($callable, $this->container));
-    }
-
-    /**
-     * 添加中间件，调度时间点分在application的invoke之前或之后
-     *
-     * @param  callable|string    $callable The callback routine
-     * @param  boolean    $after 是否在kernel执行体之后的中间件，默认是在kernel执行体之前
-     *
-     * @return static
-     */
-    public function after($callable)
-    {
-        return $this->pushToAfter(new DeferredCallable($callable, $this->container));
-    }
-
-    /**
-     * Calling a non-existant method on App checks to see if there's an item
-     * in the container that is callable and if so, calls it.
-     *
-     * @param  string $method
-     * @param  array $args
-     * @return mixed
-     */
-    public function __call($method, $args)
-    {
-        if ($this->container->has($method)) {
-            $obj = $this->container->get($method);
-            if (is_callable($obj)) {
-                return call_user_func_array($obj, $args);
-            }
-        }
-
-        throw new \BadMethodCallException("Method $method is not a valid method");
-    }
-
-    /********************************************************************************
-     * Router proxy methods
-     *******************************************************************************/
-
-    /**
-     * Add GET route
-     *
-     * @param  string $pattern  The route URI pattern
-     * @param  callable|string  $callable The route callback routine
-     *
-     * @return \Sinpe\Route\RouteInterface
-     */
-    public function get($pattern, $callable)
-    {
-        return $this->map(['GET'], $pattern, $callable);
-    }
-
-    /**
-     * Add POST route
-     *
-     * @param  string $pattern  The route URI pattern
-     * @param  callable|string  $callable The route callback routine
-     *
-     * @return \Sinpe\Route\RouteInterface
-     */
-    public function post($pattern, $callable)
-    {
-        return $this->map(['POST'], $pattern, $callable);
-    }
-
-    /**
-     * Add PUT route
-     *
-     * @param  string $pattern  The route URI pattern
-     * @param  callable|string  $callable The route callback routine
-     *
-     * @return \Sinpe\Route\RouteInterface
-     */
-    public function put($pattern, $callable)
-    {
-        return $this->map(['PUT'], $pattern, $callable);
-    }
-
-    /**
-     * Add PATCH route
-     *
-     * @param  string $pattern  The route URI pattern
-     * @param  callable|string  $callable The route callback routine
-     *
-     * @return \Sinpe\Route\RouteInterface
-     */
-    public function patch($pattern, $callable)
-    {
-        return $this->map(['PATCH'], $pattern, $callable);
-    }
-
-    /**
-     * Add DELETE route
-     *
-     * @param  string $pattern  The route URI pattern
-     * @param  callable|string  $callable The route callback routine
-     *
-     * @return \Sinpe\Route\RouteInterface
-     */
-    public function delete($pattern, $callable)
-    {
-        return $this->map(['DELETE'], $pattern, $callable);
-    }
-
-    /**
-     * Add OPTIONS route
-     *
-     * @param  string $pattern  The route URI pattern
-     * @param  callable|string  $callable The route callback routine
-     *
-     * @return \Sinpe\Route\RouteInterface
-     */
-    public function options($pattern, $callable)
-    {
-        return $this->map(['OPTIONS'], $pattern, $callable);
-    }
-
-    /**
-     * Add route for any HTTP method
-     *
-     * @param  string $pattern  The route URI pattern
-     * @param  callable|string  $callable The route callback routine
-     *
-     * @return \Sinpe\Route\RouteInterface
-     */
-    public function any($pattern, $callable)
-    {
-        return $this->map(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], $pattern, $callable);
-    }
-
-    /**
-     * Add route with multiple methods
-     *
-     * @param  string[] $methods  Numeric array of HTTP method names
-     * @param  string   $pattern  The route URI pattern
-     * @param  callable|string    $callable The route callback routine
-     *
-     * @return RouteInterface
-     */
-    public function map(array $methods, $pattern, $callable)
-    {
-        if ($callable instanceof Closure) {
-            $callable = $callable->bindTo($this->container);
-        }
-
-        $route = $this->container->get('router')->map($methods, $pattern, $callable);
-
-        if (is_callable([$route, 'setContainer'])) {
-            $route->setContainer($this->container);
-        }
-
-        if (is_callable([$route, 'setOutputBuffering'])) {
-            $route->setOutputBuffering($this->container->get('settings')['outputBuffering']);
-        }
-
-        return $route;
-    }
-
-    /**
-     * Add a route that sends an HTTP redirect
-     *
-     * @param string              $from
-     * @param string|UriInterface $to
-     * @param int                 $status
-     *
-     * @return RouteInterface
-     */
-    public function redirect($from, $to, $status = 302)
-    {
-        $handler = function ($request, ResponseInterface $response) use ($to, $status) {
-            return $response->withHeader('Location', (string)$to)->withStatus($status);
-        };
-
-        return $this->get($from, $handler);
-    }
-
-    /**
-     * Route Groups
-     *
-     * This method accepts a route pattern and a callback. All route
-     * declarations in the callback will be prepended by the group(s)
-     * that it is in.
-     *
-     * @param string   $pattern
-     * @param callable $callable
-     *
-     * @return GroupInterface
-     */
-    public function group($pattern, $callable)
-    {
-        /** @var Route\Group $group */
-        $group = $this->container->get('router')->pushGroup($pattern, $callable);
-        $group->setContainer($this->container);
-        $group($this);
-        $this->container->get('router')->popGroup();
-        return $group;
-    }
-
-    /********************************************************************************
-     * Runner
-     *******************************************************************************/
-
     /**
      * Run application
      *
@@ -393,6 +256,8 @@ class Application
      */
     public function run($silent = false)
     {
+        $this->getServer()->start();
+
         $response = $this->response;
 
         try {
@@ -400,7 +265,8 @@ class Application
             $response = $this->process($this->request, $response);
         } catch (MethodInvalid $e) {
             $response = $this->processInvalidMethod($e->getRequest(), $response);
-        } finally {
+        }
+        finally {
             $output = ob_get_clean();
         }
 
@@ -439,7 +305,7 @@ class Application
      * @return ResponseInterface
      */
     protected function processInvalidMethod(
-        ServerRequestInterface $request, 
+        ServerRequestInterface $request,
         ResponseInterface $response
     ) {
         $router = $this->container->get('router');
@@ -476,7 +342,7 @@ class Application
      * @throws RouteNotFound
      */
     public function process(
-        ServerRequestInterface $request, 
+        ServerRequestInterface $request,
         ResponseInterface $response
     ) {
         // Ensure basePath is set
@@ -535,10 +401,10 @@ class Application
             if ($body->isSeekable()) {
                 $body->rewind();
             }
-            $settings       = $this->container->get('settings');
-            $chunkSize      = $settings['responseChunkSize'];
+            $settings = $this->container->get('settings');
+            $chunkSize = $settings['responseChunkSize'];
 
-            $contentLength  = $response->getHeaderLine('Content-Length');
+            $contentLength = $response->getHeaderLine('Content-Length');
             if (!$contentLength) {
                 $contentLength = $body->getSize();
             }
@@ -591,10 +457,8 @@ class Application
         $router = $this->container->get('router');
 
         // If router hasn't been dispatched or the URI changed then dispatch
-        if (
-            null === $routeInfo 
-            || ($routeInfo['request'] !== [$request->getMethod(), (string) $request->getUri()])
-        ) {
+        if (null === $routeInfo
+            || ($routeInfo['request'] !== [$request->getMethod(), (string)$request->getUri()])) {
             $request = $this->dispatchRouterAndPrepareRoute($request, $router);
             $routeInfo = $request->getAttribute('routeInfo');
         }
@@ -689,7 +553,7 @@ class Application
             $request = $request->withAttribute('route', $route);
         }
 
-        $routeInfo['request'] = [$request->getMethod(), (string) $request->getUri()];
+        $routeInfo['request'] = [$request->getMethod(), (string)$request->getUri()];
 
         return $request->withAttribute('routeInfo', $routeInfo);
     }
@@ -718,29 +582,11 @@ class Application
             }
             $size = $response->getBody()->getSize();
             if ($size !== null && !$response->hasHeader('Content-Length')) {
-                $response = $response->withHeader('Content-Length', (string) $size);
+                $response = $response->withHeader('Content-Length', (string)$size);
             }
         }
 
         return $response;
-    }
-
-    /**
-     * Helper method, which returns true if the provided response must not output a body and false
-     * if the response could have a body.
-     *
-     * @see https://tools.ietf.org/html/rfc7231
-     *
-     * @param ResponseInterface $response
-     * @return bool
-     */
-    protected function isEmptyResponse(ResponseInterface $response)
-    {
-        if (method_exists($response, 'isEmpty')) {
-            return $response->isEmpty();
-        }
-
-        return in_array($response->getStatusCode(), [204, 205, 304]);
     }
 
     /**
@@ -820,4 +666,188 @@ class Application
         // No handlers found, so just throw the exception
         throw $e;
     }
+
+    /**
+     * 
+     */
+    public function addServer(
+        string $name,
+        int $port,
+        int $type = SWOOLE_TCP,
+        string $host = '0.0.0.0',
+        array $setting = [
+            "open_eof_check" => false,
+        ]
+    ) : Event {
+
+        $eventRegister = new Event();
+
+        $this->servers[$name] = [
+            'port' => $port,
+            'host' => $host,
+            'type' => $type,
+            'setting' => $setting,
+            'eventRegister' => $eventRegister
+        ];
+
+        return $eventRegister;
+    }
+
+    /**
+     * Undocumented function
+     *
+     * @return boolean
+     */
+    public function isStart() : bool
+    {
+        return $this->isStart;
+    }
+
+    /**
+     * Undocumented function
+     *
+     * @return void
+     */
+    private function attachListener() : void
+    {
+        $mainServer = $this->getServer();
+
+        foreach ($this->servers as $name => $server) {
+
+            $subPort = $mainServer->addlistener($server['host'], $server['port'], $server['type']);
+
+            if ($subPort) {
+                $this->servers[$name] = $subPort;
+
+                if (is_array($server['setting'])) {
+                    $subPort->set($server['setting']);
+                }
+
+                $events = $server['eventRegister']->all();
+
+                foreach ($events as $event => $callback) {
+                    $subPort->on($event, function () use ($callback) {
+                        $ret = [];
+                        $args = func_get_args();
+                        foreach ($callback as $item) {
+                            array_push($ret, Invoker::callUserFuncArray($item, $args));
+                        }
+                        if (count($ret) > 1) {
+                            return $ret;
+                        }
+                        return array_shift($ret);
+                    });
+                }
+            } else {
+                throw new Exception("addListener with server name:{$name} at host:{$server['host']} port:{$server['port']} fail");
+            }
+        }
+    }
+
+    /**
+     * Undocumented function
+     *
+     * @param array $options
+     * @return void
+     */
+    protected function createMainServer(array $options) : \swoole_server
+    {
+        $host = $options['host'];
+        $port = $options['port'];
+        $runModel = $options['run_model'];
+        $sockType = $options['sock_type'];
+
+        switch ($options['server_type']) {
+            case self::TYPE_SERVER:
+                $this->mainServer = new \swoole_server($host, $port, $runModel, $sockType);
+                break;
+            case self::TYPE_WEB_SERVER:
+                $this->mainServer = new \swoole_http_server($host, $port, $runModel, $sockType);
+                break;
+            case self::TYPE_WEB_SOCKET_SERVER:
+                $this->mainServer = new \swoole_websocket_server($host, $port, $runModel, $sockType);
+                break;
+            default:
+                throw new Exception(
+                    i18n(
+                        'Unknown server type "%s"',
+                        $options['server_type']
+                    )
+                );
+        }
+
+        $this->mainServer->set($options['swoole_settings']);
+
+        $defaultEvents = new DefaultEventsProvider();
+
+        $defaultEvents->register($this, $this->eventManager);
+
+        $reflect = new ReflectionClass(SwooleEvent::class);
+
+        foreach ($reflect->getConstants() as $event) {
+            $this->mainServer->on(
+                $event,
+                function () {
+                    return $this->eventManager->fire($event, $this, func_get_args());
+                }
+            );
+        }
+
+        return $this->mainServer;
+    }
+
+    /**
+     * @param string $name
+     * @return null|\swoole_server|\swoole_server_port
+     */
+    public function getServer($name = null)
+    {
+        if ($this->mainServer) {
+            if ($name === null) {
+                return $this->mainServer;
+            } else {
+                if (isset($this->servers[$name])) {
+                    return $this->servers[$name];
+                }
+                return null;
+            }
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Undocumented function
+     *
+     * @return integer|null
+     */
+    public function coroutineId() : ? int
+    {
+        if (class_exists('Swoole\Coroutine')) {
+            //进程错误或不在协程中的时候返回-1
+            $ret = Coroutine::getuid();
+            if ($ret >= 0) {
+                return $ret;
+            } else {
+                return null;
+            }
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Undocumented function
+     *
+     * @return boolean
+     */
+    public function isCoroutine() : bool
+    {
+        if ($this->coroutineId() !== null) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
 }
