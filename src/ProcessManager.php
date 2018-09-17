@@ -10,54 +10,71 @@
 
 namespace Sinpe\Swoole;
 
-use EasySwoole\Core\AbstractInterface\Singleton;
-use EasySwoole\Core\Component\Trigger;
 use EasySwoole\Core\Swoole\Memory\TableManager;
-use EasySwoole\Core\Swoole\ServerManager;
 use Swoole\Table;
 
 
 class ProcessManager
 {
+    private $server;
+
     private $processList = [];
 
-    function __construct()
-    {
-        TableManager::getInstance()->add(
-            'process_hash_map',
-            [
-                'pid' => [
-                    'type' => Table::TYPE_INT,
-                    'size' => 10
-                ]
-            ],
-            256
-        );
+    /**
+     * __construct
+     */
+    public function __construct(
+        ServerInterface $server
+    ) {
+        $this->server = $server;
+
+        // TODO 临时
+        // TableManager::getInstance()->add(
+        //     'process_hash_map',
+        //     [
+        //         'pid' => [
+        //             'type' => Table::TYPE_INT,
+        //             'size' => 10
+        //         ]
+        //     ],
+        //     256
+        // );
     }
 
+    /**
+     * Undocumented function
+     *
+     * @param string $processName
+     * @param string $processClass
+     * @param array $args
+     * @param boolean $async
+     * @return boolean
+     */
     public function addProcess(string $processName, string $processClass, array $args = [], $async = true) : bool
     {
-        if (ServerManager::getInstance()->isStart()) {
+        if ($this->server->isStart()) {
             trigger_error("you can not add a process {$processName}.{$processClass} after server start");
             return false;
         }
-        $key = md5($processName);
-        if (!isset($this->processList[$key])) {
-            try {
 
-                $process = new $processClass($processName, $args, $async);
-                $this->processList[$key] = $process;
-                return true;
-            } catch (\Throwable $throwable) {
-                Trigger::throwable($throwable);
-                return false;
-            }
+        $key = md5($processName);
+        
+        if (!isset($this->processList[$key])) {
+            $process = new $processClass($processName, $args, $async);
+            $this->processList[$key] = $process;
+            return true;
         } else {
             trigger_error("you can not add the same name process : {$processName}.{$processClass}");
             return false;
         }
     }
 
+    /**
+     * Undocumented function
+     *
+     * @param string $processName
+     * @return AbstractProcess|null
+     */
     public function getProcessByName(string $processName) : ? AbstractProcess
     {
         $key = md5($processName);
@@ -68,7 +85,12 @@ class ProcessManager
         }
     }
 
-
+    /**
+     * Undocumented function
+     *
+     * @param integer $pid
+     * @return AbstractProcess|null
+     */
     public function getProcessByPid(int $pid) : ? AbstractProcess
     {
         $table = TableManager::getInstance()->get('process_hash_map');
@@ -80,13 +102,25 @@ class ProcessManager
         return null;
     }
 
-
+    /**
+     * Undocumented function
+     *
+     * @param string $processName
+     * @param AbstractProcess $process
+     * @return void
+     */
     public function setProcess(string $processName, AbstractProcess $process)
     {
         $key = md5($processName);
         $this->processList[$key] = $process;
     }
 
+    /**
+     * Undocumented function
+     *
+     * @param string $processName
+     * @return boolean
+     */
     public function reboot(string $processName) : bool
     {
         $p = $this->getProcessByName($processName);
@@ -98,6 +132,13 @@ class ProcessManager
         }
     }
 
+    /**
+     * Undocumented function
+     *
+     * @param string $name
+     * @param string $data
+     * @return boolean
+     */
     public function writeByProcessName(string $name, string $data) : bool
     {
         $process = $this->getProcessByName($name);
@@ -108,6 +149,13 @@ class ProcessManager
         }
     }
 
+    /**
+     * Undocumented function
+     *
+     * @param string $name
+     * @param float $timeOut
+     * @return string|null
+     */
     public function readByProcessName(string $name, float $timeOut = 0.1) : ? string
     {
         $process = $this->getProcessByName($name);

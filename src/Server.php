@@ -14,6 +14,7 @@ use Closure;
 use Exception;
 use InvalidArgumentException;
 use Throwable;
+use ReflectionClass;
 
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -25,6 +26,7 @@ use Sinpe\Route\GroupInterface;
 use Sinpe\Route\RouteInterface;
 use Sinpe\Route\RouterInterface;
 use Sinpe\Route\Dispatcher;
+use Sinpe\Event\EventManager;
 
 use Sinpe\Swoole\Exceptions\MethodInvalid;
 use Sinpe\Swoole\Http\Response;
@@ -48,7 +50,7 @@ use Sinpe\Swoole\LogAwareTrait;
  * @property-read callable $notFoundHandler function($request, $response)
  * @property-read callable $notAllowedHandler function($request, $response, $allowedHttpMethods)
  */
-class Server
+class Server implements ServerInterface
 {
     use LogAwareTrait;
 
@@ -62,6 +64,8 @@ class Server
      * @var ContainerInterface
      */
     private $container;
+
+    private $eventManager;
 
     /**
      * 服务器类型
@@ -107,9 +111,15 @@ class Server
         }
 
         $this->container = $container;
+
+        $this->container->set(ServerInterface::class, $this);
+
+        $this->eventManager = $this->generateEventManager();
         
         // 生命周期函数initialize
         $this->initialize();
+
+        $this->displayServerInfo();
 
         $this->createServer();
 
@@ -169,7 +179,7 @@ class Server
      */
     public function workerNum()
     {
-        return !empty($this->options['worker_num']) ? $this->options['worker_num'] : 2;
+        return !empty($this->options['worker_number']) ? $this->options['worker_number'] : 2;
     }
 
     /**
@@ -217,6 +227,15 @@ class Server
     }
 
     /**
+     * 
+     * 
+     * @return void
+     */
+    protected function displayServerInfo()
+    {
+    }
+
+    /**
      * create container
      * 
      * 需要替换默认的container，覆盖此方法
@@ -229,6 +248,18 @@ class Server
     }
 
     /**
+     * 
+     * 
+     * 
+     *
+     * @return 
+     */
+    protected function generateEventManager()
+    {
+        return new EventManager();
+    }
+
+    /**
      * Enable access to the DI container by consumers of $app
      *
      * @return ContainerInterface
@@ -236,6 +267,11 @@ class Server
     public function getContainer()
     {
         return $this->container;
+    }
+
+    public function getEventManager()
+    {
+        return $this->eventManager;
     }
 
     /**
@@ -677,7 +713,7 @@ class Server
         ]
     ) : Event {
 
-        $eventRegister = new Event();
+        $eventRegister = new EventManager();
 
         $this->servers[$name] = [
             'port' => $port,
@@ -754,7 +790,7 @@ class Server
         $runModel = $options['run_model'];
         $sockType = $options['sock_type'];
 
-        switch ($options['server_type']) {
+        switch ($this->serverType()) {
             case self::TYPE_SERVER:
                 $this->mainServer = new \swoole_server($host, $port, $runModel, $sockType);
                 break;
@@ -768,14 +804,14 @@ class Server
                 throw new Exception(
                     i18n(
                         'Unknown server type "%s"',
-                        $options['server_type']
+                        $this->serverType()
                     )
                 );
         }
 
         $this->mainServer->set($options['swoole_settings']);
 
-        $defaultEvents = new DefaultEventsProvider();
+        $defaultEvents = $this->container->make(DefaultEventsProvider::class);
 
         $defaultEvents->register($this, $this->eventManager);
 

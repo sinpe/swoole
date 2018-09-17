@@ -20,7 +20,7 @@ use Psr\Http\Message\ResponseInterface;
 
 use Sinpe\IOC\ContainerInterface;
 use Sinpe\Middleware\CallableStrategies\Deferred as DeferredCallable;
-use Sinpe\Middleware\HttpAwareTrait;
+use Sinpe\Swoole\Middleware\HttpAwareTrait;
 use Sinpe\Route\GroupInterface;
 use Sinpe\Route\RouteInterface;
 use Sinpe\Route\RouterInterface;
@@ -49,7 +49,7 @@ use Sinpe\Swoole\LogAwareTrait;
  * @property-read callable $notFoundHandler function($request, $response)
  * @property-read callable $notAllowedHandler function($request, $response, $allowedHttpMethods)
  */
-class HttpServer extends Server
+trait ServerHttpTrait
 {
     use HttpAwareTrait;
 
@@ -282,8 +282,8 @@ class HttpServer extends Server
     {
         // $dispatcher = new Dispatcher($controllerNameSpace);
 
-        $register->set(
-            $register::onRequest,
+        $this->getEventManager()->attach(
+            SwooleEvent::REQUEST,
             function (\swoole_http_request $request, \swoole_http_response $response) use ($dispatcher) {
 
                 $request = new Request($request);
@@ -294,7 +294,7 @@ class HttpServer extends Server
 
                 try {
                     ob_start();
-                    
+
                     $response = $this->process($request, $response);
 
                     // 每个请求结束后都执行这个方法 可以作为后置日志等
