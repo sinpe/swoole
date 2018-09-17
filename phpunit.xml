@@ -11,7 +11,7 @@
          bootstrap="test/bootstrap.php"
         >
     <testsuites>
-        <testsuite name="Slim Tests">
+        <testsuite name="Swoole Tests">
             <directory>./test/</directory>
         </testsuite>
     </testsuites>

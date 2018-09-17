@@ -53,7 +53,6 @@ class Server
     use LogAwareTrait;
 
     const TYPE_SERVER = 1;
-
     const TYPE_HTTP = 2;
     const TYPE_WEB_SOCKET = 3;
 

@@ -8,7 +8,7 @@
  * file that was distributed with this source code.
  */
 
-namespace Sinpe\Slim;
+namespace Sinpe\Swoole;
 
 use Exception as Base;
 use Psr\Http\Message\ServerRequestInterface;
