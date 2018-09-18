@@ -59,6 +59,7 @@ class NotFound extends AbstractHandler
         }
 
         $body = new Body(fopen('php://temp', 'r+'));
+        
         $body->write($output);
 
         return $response->withStatus(404)

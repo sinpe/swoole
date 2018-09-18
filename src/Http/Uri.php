@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Swoole+ Framework (https://slimframework.com)
  *
@@ -97,6 +98,38 @@ class Uri implements UriInterface
      */
     protected $fragment = '';
 
+    // /**
+    //  * Create new Uri.
+    //  *
+    //  * @param string $scheme   Uri scheme.
+    //  * @param string $host     Uri host.
+    //  * @param int    $port     Uri port number.
+    //  * @param string $path     Uri path.
+    //  * @param string $query    Uri query string.
+    //  * @param string $fragment Uri fragment.
+    //  * @param string $user     Uri user.
+    //  * @param string $password Uri password.
+    //  */
+    // public function __construct(
+    //     $scheme,
+    //     $host,
+    //     $port = null,
+    //     $path = '/',
+    //     $query = '',
+    //     $fragment = '',
+    //     $user = '',
+    //     $password = ''
+    // ) {
+    //     $this->scheme = $this->filterScheme($scheme);
+    //     $this->host = $host;
+    //     $this->port = $this->filterPort($port);
+    //     $this->path = empty($path) ? '/' : $this->filterPath($path);
+    //     $this->query = $this->filterQuery($query);
+    //     $this->fragment = $this->filterQuery($fragment);
+    //     $this->user = $user;
+    //     $this->password = $password;
+    // }
+
     /**
      * Create new Uri.
      *
@@ -114,19 +147,20 @@ class Uri implements UriInterface
         $host,
         $port = null,
         $path = '/',
-        $query = '',
-        $fragment = '',
-        $user = '',
-        $password = ''
+        $query = ''
+        // $fragment = '',
+        // $user = '',
+        // $password = ''
     ) {
         $this->scheme = $this->filterScheme($scheme);
         $this->host = $host;
         $this->port = $this->filterPort($port);
         $this->path = empty($path) ? '/' : $this->filterPath($path);
         $this->query = $this->filterQuery($query);
-        $this->fragment = $this->filterQuery($fragment);
-        $this->user = $user;
-        $this->password = $password;
+
+        // $this->fragment = $this->filterQuery($fragment);
+        // $this->user = $user;
+        // $this->password = $password;
     }
 
     /**
@@ -165,78 +199,77 @@ class Uri implements UriInterface
      */
     public static function createFromEnvironment(Environment $env)
     {
-        // Scheme
-        $isSecure = $env->get('HTTPS');
-        $scheme = (empty($isSecure) || $isSecure === 'off') ? 'http' : 'https';
+        $scheme = strpos($env->get('server_protocol'), 'HTTPS') === 0 ? 'https' : 'http';
 
-        // Authority: Username and password
-        $username = $env->get('PHP_AUTH_USER', '');
-        $password = $env->get('PHP_AUTH_PW', '');
+        // // Authority: Username and password
+        // $username = $env->get('PHP_AUTH_USER', '');
+        // $password = $env->get('PHP_AUTH_PW', '');
 
-        // Authority: Host
-        if ($env->has('HTTP_HOST')) {
-            $host = $env->get('HTTP_HOST');
-        } else {
-            $host = $env->get('SERVER_NAME');
-        }
+        // // Authority: Host
+        // if ($env->has('HTTP_HOST')) {
+        //     $host = $env->get('HTTP_HOST');
+        // } else {
+        //     $host = $env->get('SERVER_NAME');
+        // }
 
+        $host = (int)$env->get('remote_addr', '127.0.0.1');
         // Authority: Port
-        $port = (int)$env->get('SERVER_PORT', 80);
-        if (preg_match('/^(\[[a-fA-F0-9:.]+\])(:\d+)?\z/', $host, $matches)) {
-            $host = $matches[1];
+        $port = (int)$env->get('server_port', 80);
 
-            if (isset($matches[2])) {
-                $port = (int) substr($matches[2], 1);
-            }
-        } else {
-            $pos = strpos($host, ':');
-            if ($pos !== false) {
-                $port = (int) substr($host, $pos + 1);
-                $host = strstr($host, ':', true);
-            }
-        }
+        // if (preg_match('/^(\[[a-fA-F0-9:.]+\])(:\d+)?\z/', $host, $matches)) {
+        //     $host = $matches[1];
 
-        // Path
-        $requestScriptName = parse_url($env->get('SCRIPT_NAME'), PHP_URL_PATH);
-        $requestScriptDir = dirname($requestScriptName);
+        //     if (isset($matches[2])) {
+        //         $port = (int)substr($matches[2], 1);
+        //     }
+        // } else {
+        //     $pos = strpos($host, ':');
+        //     if ($pos !== false) {
+        //         $port = (int)substr($host, $pos + 1);
+        //         $host = strstr($host, ':', true);
+        //     }
+        // }
+
+        // // Path
+        // $requestScriptName = parse_url($env->get('SCRIPT_NAME'), PHP_URL_PATH);
+        // $requestScriptDir = dirname($requestScriptName);
 
         // parse_url() requires a full URL. As we don't extract the domain name or scheme,
         // we use a stand-in.
-        $requestUri = parse_url('http://example.com' . $env->get('REQUEST_URI'), PHP_URL_PATH);
+        $requestUri = parse_url('http://example.com' . $env->get('request_uri'), PHP_URL_PATH);
 
         $basePath = '';
         $virtualPath = $requestUri;
-        if (stripos($requestUri, $requestScriptName) === 0) {
-            $basePath = $requestScriptName;
-        } elseif ($requestScriptDir !== '/' && stripos($requestUri, $requestScriptDir) === 0) {
-            $basePath = $requestScriptDir;
-        }
 
-        if ($basePath) {
-            $virtualPath = ltrim(substr($requestUri, strlen($basePath)), '/');
-        }
+        // if (stripos($requestUri, $requestScriptName) === 0) {
+        //     $basePath = $requestScriptName;
+        // } elseif ($requestScriptDir !== '/' && stripos($requestUri, $requestScriptDir) === 0) {
+        //     $basePath = $requestScriptDir;
+        // }
+
+        // if ($basePath) {
+        //     $virtualPath = ltrim(substr($requestUri, strlen($basePath)), '/');
+        // }
 
         // Query string
-        $queryString = $env->get('QUERY_STRING', '');
+        $queryString = $env->get('query_string', '');
+
         if ($queryString === '') {
-            $queryString = parse_url('http://example.com' . $env->get('REQUEST_URI'), PHP_URL_QUERY);
+            $queryString = parse_url('http://example.com' . $env->get('request_uri'), PHP_URL_QUERY);
         }
 
-        // Fragment
-        $fragment = '';
+        // // Fragment
+        // $fragment = '';
 
         // Build Uri
-        $uri = new static($scheme, $host, $port, $virtualPath, $queryString, $fragment, $username, $password);
-        if ($basePath) {
-            $uri = $uri->withBasePath($basePath);
-        }
+        $uri = new static($scheme, $host, $port, $virtualPath, $queryString);//, $fragment, $username, $password);
+
+        // if ($basePath) {
+        //     $uri = $uri->withBasePath($basePath);
+        // }
 
         return $uri;
     }
-
-    /********************************************************************************
-     * Scheme
-     *******************************************************************************/
 
     /**
      * Retrieve the scheme component of the URI.
@@ -309,10 +342,6 @@ class Uri implements UriInterface
 
         return $scheme;
     }
-
-    /********************************************************************************
-     * Authority
-     *******************************************************************************/
 
     /**
      * Retrieve the authority component of the URI.
@@ -514,10 +543,6 @@ class Uri implements UriInterface
         throw new InvalidArgumentException('Uri port must be null or an integer between 1 and 65535 (inclusive)');
     }
 
-    /********************************************************************************
-     * Path
-     *******************************************************************************/
-
     /**
      * Retrieve the path component of the URI.
      *
@@ -649,10 +674,6 @@ class Uri implements UriInterface
             $path
         );
     }
-
-    /********************************************************************************
-     * Query
-     *******************************************************************************/
 
     /**
      * Retrieve the query string of the URI.

@@ -13,6 +13,7 @@ namespace Sinpe\Swoole;
 use Closure;
 use Exception;
 use InvalidArgumentException;
+use RuntimeException;
 use Throwable;
 
 use Psr\Http\Message\ServerRequestInterface;
@@ -62,7 +63,7 @@ trait ServerHttpTrait
         // set_exception_handler(
         //     function ($e) use ($request, $response) {
         //         $response = $this->handleException($e, $request, $response);
-        //         $this->respond($response);
+        //         $this->end($response);
         //     }
         // );
 
@@ -284,7 +285,6 @@ trait ServerHttpTrait
     public function run($silent = false)
     {
         $this->showLogo();
-
         $this->displayServerInfo();
 
         $swooleServer = $this->getSwooleServer();
@@ -334,7 +334,7 @@ trait ServerHttpTrait
                 $response = $this->finalize($response);
 
                 if (!$silent) {
-                    $this->respond($response);
+                    $this->end($response);
                 }
 
                 return $response;
@@ -367,6 +367,7 @@ trait ServerHttpTrait
         }
 
         $request = $this->dispatchRouterAndPrepareRoute($request, $router);
+        
         $routeInfo = $request->getAttribute('routeInfo', [RouterInterface::DISPATCH_STATUS => Dispatcher::NOT_FOUND]);
 
         if ($routeInfo[RouterInterface::DISPATCH_STATUS] === Dispatcher::METHOD_NOT_ALLOWED) {
@@ -401,7 +402,10 @@ trait ServerHttpTrait
         // Ensure basePath is set
         $router = $this->container()->get('router');
 
-        if (is_callable([$request->getUri(), 'getBasePath']) && is_callable([$router, 'setBasePath'])) {
+        if (
+            is_callable([$request->getUri(), 'getBasePath']) 
+            && is_callable([$router, 'setBasePath'])
+        ) {
             $router->setBasePath($request->getUri()->getBasePath());
         }
 
@@ -425,32 +429,36 @@ trait ServerHttpTrait
      *
      * @param ResponseInterface $response
      */
-    public function respond(ResponseInterface $response)
+    public function end(ResponseInterface $response)
     {
         // Send response
         if (!headers_sent()) {
+
             // Headers
             foreach ($response->getHeaders() as $name => $values) {
                 foreach ($values as $value) {
-                    header(i18n('%s: %s', $name, $value), false);
+                    $response->_header($name, $value);
                 }
             }
 
-            // Set the status _after_ the headers, because of PHP's "helpful" behavior with location headers.
-            // See https://github.com/slimphp/Swoole/issues/1730
+            // // Status
+            // header(
+            //     sprintf(
+            //         'HTTP/%s %s %s',
+            //         $response->getProtocolVersion(),
+            //         $response->getStatusCode(),
+            //         $response->getReasonPhrase()
+            //     )
+            // );
 
-            // Status
-            header(i18n(
-                'HTTP/%s %s %s',
-                $response->getProtocolVersion(),
-                $response->getStatusCode(),
-                $response->getReasonPhrase()
-            ));
+            $response->status($response->getStatusCode());
         }
 
         // Body
         if (!$this->isEmptyResponse($response)) {
+
             $body = $response->getBody();
+
             if ($body->isSeekable()) {
                 $body->rewind();
             }
@@ -460,16 +468,19 @@ trait ServerHttpTrait
             $chunkSize = $settings['responseChunkSize'];
 
             $contentLength = $response->getHeaderLine('Content-Length');
+
             if (!$contentLength) {
                 $contentLength = $body->getSize();
             }
 
-
             if (isset($contentLength)) {
+
                 $amountToRead = $contentLength;
+
                 while ($amountToRead > 0 && !$body->eof()) {
                     $data = $body->read(min($chunkSize, $amountToRead));
-                    echo $data;
+
+                    $response->write($data);
 
                     $amountToRead -= strlen($data);
 
@@ -479,13 +490,17 @@ trait ServerHttpTrait
                 }
             } else {
                 while (!$body->eof()) {
-                    echo $body->read($chunkSize);
+
+                    $response->write($body->read($chunkSize));
+
                     if (connection_status() != CONNECTION_NORMAL) {
                         break;
                     }
                 }
             }
         }
+
+        $response->end();
     }
 
     /**
@@ -586,7 +601,9 @@ trait ServerHttpTrait
         $routeInfo = $router->dispatch($request);
 
         if ($routeInfo[0] === Dispatcher::FOUND) {
+
             $routeArguments = [];
+
             foreach ($routeInfo[2] as $k => $v) {
                 $routeArguments[$k] = urldecode($v);
             }
@@ -624,10 +641,12 @@ trait ServerHttpTrait
         if (isset($container->get('settings')['addContentLengthHeader']) &&
             $container->get('settings')['addContentLengthHeader'] == true) {
             if (ob_get_length() > 0) {
-                throw new \RuntimeException("Unexpected data in output buffer. " .
+                throw new RuntimeException("Unexpected data in output buffer. " .
                     "Maybe you have characters before an opening <?php tag?");
             }
+
             $size = $response->getBody()->getSize();
+
             if ($size !== null && !$response->hasHeader('Content-Length')) {
                 $response = $response->withHeader('Content-Length', (string)$size);
             }

@@ -298,6 +298,7 @@ abstract class Message implements MessageInterface
     {
         // TODO: Test for invalid body?
         $clone = clone $this;
+        
         $clone->body = $body;
 
         return $clone;

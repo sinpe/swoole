@@ -146,7 +146,7 @@ class Response extends Message implements ResponseInterface
         StreamInterface $body = null
     ) {
         $this->response = $response;
-        
+
         $this->status = $this->filterStatus($status);
         $this->headers = $headers ? $headers : new Headers();
         $this->body = $body ? $body : new Body(fopen('php://temp', 'r+'));
@@ -263,10 +263,6 @@ class Response extends Message implements ResponseInterface
         return '';
     }
 
-    /*******************************************************************************
-     * Headers
-     ******************************************************************************/
-
     /**
      * Return an instance with the provided value replacing the specified header.
      *
@@ -290,26 +286,71 @@ class Response extends Message implements ResponseInterface
         return $clone;
     }
 
+    // /**
+    //  * Write data to the response body.
+    //  *
+    //  * Note: This method is not part of the PSR-7 standard.
+    //  *
+    //  * Proxies to the underlying stream and writes the provided data to it.
+    //  *
+    //  * @param string $data
+    //  * @return $this
+    //  */
+    // public function write($data)
+    // {
+    //     $this->getBody()->write($data);
 
-    /*******************************************************************************
-     * Body
-     ******************************************************************************/
+    //     return $this;
+    // }
 
     /**
-     * Write data to the response body.
+     * swoole write
      *
-     * Note: This method is not part of the PSR-7 standard.
-     *
-     * Proxies to the underlying stream and writes the provided data to it.
-     *
-     * @param string $data
-     * @return $this
+     * @param [type] $data
+     * @return void
      */
     public function write($data)
     {
-        $this->getBody()->write($data);
+        $this->response->write($data);
 
         return $this;
+    }
+
+    /**
+     * swoole status
+     *
+     * @param [type] $data
+     * @return void
+     */
+    public function status(int $httpStatusCode)
+    {
+        $this->response->status($httpStatusCode);
+
+        return $this;
+    }
+
+    /**
+     * swoole header
+     *
+     * @param [type] $data
+     * @return void
+     */
+    public function _header(string $key, string $value, bool $ucwords = true)
+    {
+        $this->response->header($key, $value, $ucwords);
+
+        return $this;
+    }
+
+    /**
+     * swoole end
+     *
+     * @param [type] $data
+     * @return void
+     */
+    public function end($data = '')
+    {
+        $this->response->end($data);
     }
 
     /*******************************************************************************
@@ -360,6 +401,7 @@ class Response extends Message implements ResponseInterface
     public function withJson($data, $status = null, $encodingOptions = 0)
     {
         $response = $this->withBody(new Body(fopen('php://temp', 'r+')));
+
         $response->body->write($json = json_encode($data, $encodingOptions));
 
         // Ensure that the json encoding passed successfully
@@ -368,9 +410,11 @@ class Response extends Message implements ResponseInterface
         }
 
         $responseWithJson = $response->withHeader('Content-Type', 'application/json;charset=utf-8');
+
         if (isset($status)) {
             return $responseWithJson->withStatus($status);
         }
+
         return $responseWithJson;
     }
 

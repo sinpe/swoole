@@ -13,8 +13,9 @@ use Illuminate\Support\Collection;
 
 use Closure;
 use InvalidArgumentException;
-use Psr\Http\Message\UploadedFileInterface;
 use RuntimeException;
+
+use Psr\Http\Message\UploadedFileInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\UriInterface;
 use Psr\Http\Message\StreamInterface;
@@ -153,22 +154,11 @@ class Request extends Message implements ServerRequestInterface
      */
     public function __construct(\swoole_http_request $request)
     {
-
         $this->request = $request;
 
         $environment = new Environment($request->server);
 
-        $method = $environment['REQUEST_METHOD'];
-
-        $uri = Uri::createFromEnvironment($environment);
-        $headers = Headers::createFromEnvironment($environment);
-        $cookies = Cookies::parseHeader($headers->get('Cookie', []));
-
-        $serverParams = $environment->all();
-
-        $body = new RequestBody();
-
-        $uploadedFiles = UploadedFile::createFromEnvironment($environment);
+        $method = $environment->get('request_method');
 
         if ($method === 'POST' &&
             in_array($this->getMediaType(), ['application/x-www-form-urlencoded', 'multipart/form-data'])) {
@@ -182,13 +172,14 @@ class Request extends Message implements ServerRequestInterface
             $this->originalMethod = $method;
         }
 
-        $this->uri = $uri;
-        $this->headers = $headers;
-        $this->cookies = $cookies;
-        $this->serverParams = $serverParams;
+        $this->uri = Uri::createFromEnvironment($environment);
+        // TODO
+        $this->headers = Headers::createFromEnvironment($environment);
+        $this->cookies = Cookies::parseHeader($this->headers->get('Cookie', []));
+        $this->serverParams = $environment->all();
         $this->attributes = new Collection();
-        $this->body = $body;
-        $this->uploadedFiles = $uploadedFiles;
+        $this->body = new RequestBody();
+        $this->uploadedFiles = UploadedFile::createFromEnvironment($environment);
 
         if (isset($serverParams['SERVER_PROTOCOL'])) {
             $this->protocolVersion = str_replace('HTTP/', '', $serverParams['SERVER_PROTOCOL']);
