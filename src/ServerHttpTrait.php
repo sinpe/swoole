@@ -18,23 +18,22 @@ use Throwable;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
-use Sinpe\IOC\ContainerInterface;
 use Sinpe\Middleware\CallableStrategies\Deferred as DeferredCallable;
 use Sinpe\Swoole\Middleware\HttpAwareTrait;
-use Sinpe\Route\GroupInterface;
 use Sinpe\Route\RouteInterface;
 use Sinpe\Route\RouterInterface;
 use Sinpe\Route\Dispatcher;
 
 use Sinpe\Swoole\Exceptions\MethodInvalid;
-use Sinpe\Swoole\Http\Response;
-use Sinpe\Swoole\Exception as SwooleException;
 use Sinpe\Swoole\Exceptions\MethodNotAllowed;
 use Sinpe\Swoole\Exceptions\RouteNotFound;
+
 use Sinpe\Swoole\Http\Uri;
 use Sinpe\Swoole\Http\Headers;
 use Sinpe\Swoole\Http\Body;
 use Sinpe\Swoole\Http\Request;
+use Sinpe\Swoole\Http\Response;
+
 use Sinpe\Swoole\LogAwareTrait;
 
 /**
@@ -90,7 +89,7 @@ trait ServerHttpTrait
      */
     public function before($callable)
     {
-        return $this->pushToBefore(new DeferredCallable($callable, $this->container));
+        return $this->pushToBefore(new DeferredCallable($callable, $this->container()));
     }
 
     /**
@@ -103,7 +102,7 @@ trait ServerHttpTrait
      */
     public function after($callable)
     {
-        return $this->pushToAfter(new DeferredCallable($callable, $this->container));
+        return $this->pushToAfter(new DeferredCallable($callable, $this->container()));
     }
 
     /**
@@ -208,18 +207,20 @@ trait ServerHttpTrait
      */
     public function map(array $methods, $pattern, $callable)
     {
+        $container = $this->container();
+
         if ($callable instanceof Closure) {
-            $callable = $callable->bindTo($this->container);
+            $callable = $callable->bindTo($container);
         }
 
-        $route = $this->container->get('router')->map($methods, $pattern, $callable);
+        $route = $container->get('router')->map($methods, $pattern, $callable);
 
         if (is_callable([$route, 'setContainer'])) {
-            $route->setContainer($this->container);
+            $route->setContainer($container);
         }
 
         if (is_callable([$route, 'setOutputBuffering'])) {
-            $route->setOutputBuffering($this->container->get('settings')['outputBuffering']);
+            $route->setOutputBuffering($container->get('settings')['outputBuffering']);
         }
 
         return $route;
@@ -257,11 +258,13 @@ trait ServerHttpTrait
      */
     public function group($pattern, $callable)
     {
-        /** @var Route\Group $group */
-        $group = $this->container->get('router')->pushGroup($pattern, $callable);
-        $group->setContainer($this->container);
+        $container = $this->container();
+
+        $group = $container->get('router')->pushGroup($pattern, $callable);
+        $group->setContainer($container);
         $group();
-        $this->container->get('router')->popGroup();
+        $container->get('router')->popGroup();
+
         return $group;
     }
 
@@ -280,11 +283,15 @@ trait ServerHttpTrait
      */
     public function run($silent = false)
     {
-        // $dispatcher = new Dispatcher($controllerNameSpace);
+        $this->showLogo();
 
-        $this->getEventManager()->attach(
-            SwooleEvent::REQUEST,
-            function (\swoole_http_request $request, \swoole_http_response $response) use ($dispatcher) {
+        $this->displayServerInfo();
+
+        $swooleServer = $this->getSwooleServer();
+
+        $swooleServer->on(
+            'request',
+            function (\swoole_http_request $request, \swoole_http_response $response) {
 
                 $request = new Request($request);
                 $response = new Response($response);
@@ -303,14 +310,16 @@ trait ServerHttpTrait
                     // Logger::getInstance()->console("request :{$request->getUri()->getPath()} take {$spend}");
 
                 } catch (MethodInvalid $e) {
-                    $response = $this->processInvalidMethod($e->getRequest(), $response);
+                    $response = $this->processInvalidMethod($request, $response);
                 }
                 finally {
                     $output = ob_get_clean();
                 }
 
                 if (!empty($output) && $response->getBody()->isWritable()) {
-                    $outputBuffering = $this->container->get('settings')['outputBuffering'];
+
+                    $outputBuffering = $this->container()->get('settings')['outputBuffering'];
+
                     if ($outputBuffering === 'prepend') {
                         // prepend output buffer content
                         $body = new Http\Body(fopen('php://temp', 'r+'));
@@ -332,7 +341,7 @@ trait ServerHttpTrait
             }
         );
 
-        $this->getServer()->start();
+        $swooleServer->start();
     }
 
     /**
@@ -351,7 +360,8 @@ trait ServerHttpTrait
         ServerRequestInterface $request,
         ResponseInterface $response
     ) {
-        $router = $this->container->get('router');
+        $router = $this->container()->get('router');
+
         if (is_callable([$request->getUri(), 'getBasePath']) && is_callable([$router, 'setBasePath'])) {
             $router->setBasePath($request->getUri()->getBasePath());
         }
@@ -361,13 +371,13 @@ trait ServerHttpTrait
 
         if ($routeInfo[RouterInterface::DISPATCH_STATUS] === Dispatcher::METHOD_NOT_ALLOWED) {
             return $this->handleException(
-                new MethodNotAllowed($request, $response, $routeInfo[RouterInterface::ALLOWED_METHODS]),
+                new MethodNotAllowed($routeInfo[RouterInterface::ALLOWED_METHODS]),
                 $request,
                 $response
             );
         }
 
-        return $this->handleException(new RouteNotFound($request, $response), $request, $response);
+        return $this->handleException(new RouteNotFound, $request, $response);
     }
 
     /**
@@ -389,7 +399,7 @@ trait ServerHttpTrait
         ResponseInterface $response
     ) {
         // Ensure basePath is set
-        $router = $this->container->get('router');
+        $router = $this->container()->get('router');
 
         if (is_callable([$request->getUri(), 'getBasePath']) && is_callable([$router, 'setBasePath'])) {
             $router->setBasePath($request->getUri()->getBasePath());
@@ -444,7 +454,9 @@ trait ServerHttpTrait
             if ($body->isSeekable()) {
                 $body->rewind();
             }
-            $settings = $this->container->get('settings');
+
+            $settings = $this->container()->get('settings');
+
             $chunkSize = $settings['responseChunkSize'];
 
             $contentLength = $response->getHeaderLine('Content-Length');
@@ -493,11 +505,13 @@ trait ServerHttpTrait
      */
     public function __invoke(ServerRequestInterface $request, ResponseInterface $response)
     {
+        $container = $this->container();
+
         // Get the route info
         $routeInfo = $request->getAttribute('routeInfo');
 
         /** @var \Sinpe\Route\RouterInterface $router */
-        $router = $this->container->get('router');
+        $router = $container->get('router');
 
         // If router hasn't been dispatched or the URI changed then dispatch
         if (null === $routeInfo
@@ -510,23 +524,10 @@ trait ServerHttpTrait
             $route = $router->lookupRoute($routeInfo[1]);
             return $route->run($request, $response);
         } elseif ($routeInfo[0] === Dispatcher::METHOD_NOT_ALLOWED) {
-            // if (!$this->container->has('notAllowedHandler')) {
-            throw new MethodNotAllowed($request, $response, $routeInfo[1]);
-            // }
-            // /** @var callable $notAllowedHandler */
-            // $notAllowedHandler = $this->container->get('notAllowedHandler');
-
-            // return $notAllowedHandler($request, $response, $routeInfo[1]);
+            throw new MethodNotAllowed($routeInfo[1]);
         }
-        
-        // if (!$this->container->has('notFoundHandler')) {
-        throw new RouteNotFound($request, $response);
-        // }
-        
-        // /** @var callable $notFoundHandler */
-        // $notFoundHandler = $this->container->get('notFoundHandler');
-        
-        // return $notFoundHandler($request, $response);
+
+        throw new RouteNotFound;
     }
 
     /**
@@ -556,7 +557,8 @@ trait ServerHttpTrait
         $bodyContent = '',
         ResponseInterface $response = null
     ) {
-        $env = $this->container->get('environment');
+        $env = $this->container()->get('environment');
+
         $uri = Uri::createFromEnvironment($env)->withPath($path)->withQuery($query);
         $headers = new Headers($headers);
         $serverParams = $env->all();
@@ -616,9 +618,11 @@ trait ServerHttpTrait
             return $response->withoutHeader('Content-Type')->withoutHeader('Content-Length');
         }
 
+        $container = $this->container();
+
         // Add Content-Length header if `addContentLengthHeader` setting is set
-        if (isset($this->container->get('settings')['addContentLengthHeader']) &&
-            $this->container->get('settings')['addContentLengthHeader'] == true) {
+        if (isset($container->get('settings')['addContentLengthHeader']) &&
+            $container->get('settings')['addContentLengthHeader'] == true) {
             if (ob_get_length() > 0) {
                 throw new \RuntimeException("Unexpected data in output buffer. " .
                     "Maybe you have characters before an opening <?php tag?");
@@ -680,21 +684,20 @@ trait ServerHttpTrait
 
         if ($e instanceof MethodNotAllowed) {
             $handler = 'notAllowedHandler';
-            $params = [$e->getRequest(), $e->getResponse(), $e->getAllowedMethods()];
+            $params = [$request, $response, $e->getAllowedMethods()];
         } elseif ($e instanceof RouteNotFound) {
             $handler = 'notFoundHandler';
-            $params = [$e->getRequest(), $e->getResponse(), $e];
-        } elseif ($e instanceof SwooleException) {
-            // This is a Stop exception and contains the response
-            return $e->getResponse();
+            $params = [$request, $response, $e];
         } else {
             // Other exception, use $request and $response params
             $handler = 'errorHandler';
             $params = [$request, $response, $e];
         }
 
-        if ($this->container->has($handler)) {
-            $callable = $this->container->get($handler);
+        $container = $this->container();
+
+        if ($container->has($handler)) {
+            $callable = $container->get($handler);
             // Call the registered handler
             return call_user_func_array($callable, $params);
         }
@@ -719,8 +722,10 @@ trait ServerHttpTrait
 
         $params = [$request, $response, $e];
 
-        if ($this->container->has($handler)) {
-            $callable = $this->container->get($handler);
+        $container = $this->container();
+
+        if ($container->has($handler)) {
+            $callable = $container->get($handler);
             // Call the registered handler
             return call_user_func_array($callable, $params);
         }

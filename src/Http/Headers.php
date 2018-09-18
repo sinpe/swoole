@@ -50,7 +50,9 @@ class Headers extends Collection implements HeadersInterface
     public static function createFromEnvironment(Environment $environment)
     {
         $data = [];
+
         $environment = self::determineAuthorization($environment);
+
         foreach ($environment as $key => $value) {
             $key = strtoupper($key);
             if (isset(static::$special[$key]) || strpos($key, 'HTTP_') === 0) {
@@ -80,7 +82,7 @@ class Headers extends Collection implements HeadersInterface
             $headers = getallheaders();
             $headers = array_change_key_case($headers, CASE_LOWER);
             if (isset($headers['authorization'])) {
-                $environment->set('HTTP_AUTHORIZATION', $headers['authorization']);
+                $environment->put('HTTP_AUTHORIZATION', $headers['authorization']);
             }
         }
 
@@ -173,7 +175,8 @@ class Headers extends Collection implements HeadersInterface
     {
         $oldValues = $this->get($key, []);
         $newValues = is_array($value) ? $value : [$value];
-        $this->set($key, array_merge($oldValues, array_values($newValues)));
+        
+        $this->put($key, array_merge($oldValues, array_values($newValues)));
     }
 
     /**

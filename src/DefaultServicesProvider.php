@@ -10,15 +10,19 @@
 
 namespace Sinpe\Swoole;
 
+use Psr\Container\ContainerInterface;
+
+use Sinpe\Route\Router;
+use Sinpe\Route\RouterInterface;
 use Sinpe\Route\Strategies\Autowiring;
 
 use Sinpe\Middleware\Resolver as CallableResolver;
+
 use Sinpe\Swoole\Handlers\PhpError;
 use Sinpe\Swoole\Handlers\Error;
 use Sinpe\Swoole\Handlers\NotFound;
 use Sinpe\Swoole\Handlers\NotAllowed;
 
-use Sinpe\IOC\ContainerInterface;
 use Sinpe\IOC\Container\ServiceProviderInterface;
 
 /**
@@ -51,13 +55,13 @@ class DefaultServicesProvider implements ServiceProviderInterface
                     $routerCacheFile = $container->get('settings')['routerCacheFile'];
                 }
 
-                $router = (new Route\Router($container))->setCacheFile($routerCacheFile);
+                $router = (new Router($container))->setCacheFile($routerCacheFile);
 
                 return $router;
             };
 
-            $container[Route\Router::class] = 'router';
-            $container[Route\RouterInterface::class] = 'router';
+            $container[Router::class] = 'router';
+            $container[RouterInterface::class] = 'router';
         }
 
         if (!isset($container['foundHandler'])) {

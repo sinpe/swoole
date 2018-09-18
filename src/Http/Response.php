@@ -281,7 +281,7 @@ class Response extends Message implements ResponseInterface
     public function withHeader($name, $value)
     {
         $clone = clone $this;
-        $clone->headers->set($name, $value);
+        $clone->headers->put($name, $value);
 
         if ($clone->getStatusCode() === 200 && strtolower($name) === 'location') {
             $clone = $clone->withStatus(302);

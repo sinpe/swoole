@@ -8,7 +8,7 @@
  */
 namespace Sinpe\Swoole\Exceptions;
 
-use Sinpe\Swoole\Exception;
+use Exception;
 
 class RouteNotFound extends Exception
 {

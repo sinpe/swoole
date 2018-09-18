@@ -12,16 +12,9 @@ use Psr\Http\Message\ServerRequestInterface;
 
 class MethodInvalid extends \InvalidArgumentException
 {
-    protected $request;
-
-    public function __construct(ServerRequestInterface $request, $method)
+    public function __construct($method)
     {
-        $this->request = $request;
         parent::__construct(i18n('Unsupported HTTP method "%s" provided', $method));
     }
 
-    public function getRequest()
-    {
-        return $this->request;
-    }
 }

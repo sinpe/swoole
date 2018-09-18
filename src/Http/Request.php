@@ -161,9 +161,7 @@ class Request extends Message implements ServerRequestInterface
         $method = $environment['REQUEST_METHOD'];
 
         $uri = Uri::createFromEnvironment($environment);
-
         $headers = Headers::createFromEnvironment($environment);
-
         $cookies = Cookies::parseHeader($headers->get('Cookie', []));
 
         $serverParams = $environment->all();
@@ -198,8 +196,7 @@ class Request extends Message implements ServerRequestInterface
 
         if (!$this->headers->has('Host') && $this->uri->getHost() !== '') {
             $port = $this->uri->getPort() ? ":{$this->uri->getPort()}" : '';
-
-            $this->headers->set('Host', $this->uri->getHost() . $port);
+            $this->headers->put('Host', $this->uri->getHost() . $port);
         }
 
         $this->registerMediaTypeParser('application/json', function ($input) {
@@ -351,7 +348,7 @@ class Request extends Message implements ServerRequestInterface
 
         $method = strtoupper($method);
         if (preg_match("/^[!#$%&'*+.^_`|~0-9a-z-]+$/i", $method) !== 1) {
-            throw new MethodInvalid($this, $method);
+            throw new MethodInvalid($method);
         }
 
         return $method;
@@ -591,11 +588,11 @@ class Request extends Message implements ServerRequestInterface
 
         if (!$preserveHost) {
             if ($uri->getHost() !== '') {
-                $clone->headers->set('Host', $uri->getHost());
+                $clone->headers->put('Host', $uri->getHost());
             }
         } else {
             if ($uri->getHost() !== '' && (!$this->hasHeader('Host') || $this->getHeaderLine('Host') === '')) {
-                $clone->headers->set('Host', $uri->getHost());
+                $clone->headers->put('Host', $uri->getHost());
             }
         }
 
@@ -947,7 +944,7 @@ class Request extends Message implements ServerRequestInterface
     public function withAttribute($name, $value)
     {
         $clone = clone $this;
-        $clone->attributes->set($name, $value);
+        $clone->attributes->put($name, $value);
 
         return $clone;
     }

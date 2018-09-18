@@ -12,10 +12,6 @@ namespace Sinpe\Swoole;
 
 class SwooleEvent
 {
-    // const TIMER = 'timer';
-    // const MESSAGE = 'message';
-    // const OPEN = 'open';
-
     const START = 'start';
     const SHUTDOWN = 'shutdown';
     const WORKER_START = 'workerStart';
@@ -34,6 +30,9 @@ class SwooleEvent
     const MANAGER_START = 'managerStart';
     const MANAGER_STOP = 'managerStop';
 
+    // const TIMER = 'timer';
+    // const MESSAGE = 'message';
+    // const OPEN = 'open';
     const HAND_SHAKE = 'handShake';
-    const REQUEST = 'request';
+
 }

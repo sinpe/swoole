@@ -10,34 +10,16 @@
 
 namespace Sinpe\Swoole;
 
-use Closure;
 use Exception;
 use InvalidArgumentException;
-use Throwable;
 use ReflectionClass;
 
-use Psr\Http\Message\ServerRequestInterface;
-use Psr\Http\Message\ResponseInterface;
+use Psr\Container\ContainerInterface;
 
-use Sinpe\IOC\ContainerInterface;
-use Sinpe\Middleware\CallableStrategies\Deferred as DeferredCallable;
-use Sinpe\Middleware\HttpAwareTrait;
-use Sinpe\Route\GroupInterface;
-use Sinpe\Route\RouteInterface;
-use Sinpe\Route\RouterInterface;
-use Sinpe\Route\Dispatcher;
 use Sinpe\Event\EventManager;
+use Sinpe\Event\EventManagerInterface;
 
-use Sinpe\Swoole\Exceptions\MethodInvalid;
-use Sinpe\Swoole\Http\Response;
-use Sinpe\Swoole\Exception as SwooleException;
-use Sinpe\Swoole\Exceptions\MethodNotAllowed;
-use Sinpe\Swoole\Exceptions\RouteNotFound;
-use Sinpe\Swoole\Http\Uri;
-use Sinpe\Swoole\Http\Headers;
-use Sinpe\Swoole\Http\Body;
-use Sinpe\Swoole\Http\Request;
-use Sinpe\Swoole\LogAwareTrait;
+// use Sinpe\Swoole\LogAwareTrait;
 
 /**
  * App
@@ -52,19 +34,20 @@ use Sinpe\Swoole\LogAwareTrait;
  */
 class Server implements ServerInterface
 {
-    use LogAwareTrait;
+    // use LogAwareTrait;
 
     const TYPE_SERVER = 1;
     const TYPE_HTTP = 2;
     const TYPE_WEB_SOCKET = 3;
 
     /**
-     * Container
-     *
      * @var ContainerInterface
      */
     private $container;
 
+    /**
+     * @var EventManagerInterface
+     */
     private $eventManager;
 
     /**
@@ -75,24 +58,39 @@ class Server implements ServerInterface
     private $serverType;
 
     /**
+     * Swoole主服务
+     *
+     * @var \swoole_server
+     */
+    private $swooleServer;
+
+    /**
      * 运行参数
      *
      * @var array
      */
     private $options;
 
-    private $servers = [];
-    private $mainServer = null;
+
+
     private $isStart = false;
+
+
+
+    /**
+     * 
+     *
+     * @var \swoole_server[]
+     */
+    private $moreSwooleServers = [];
 
     /**
      * __construct
      *
      * @throws InvalidArgumentException when no container is provided that implements ContainerInterface
      */
-    public function __construct(
-        string $serverType
-    ) {
+    public function __construct(string $serverType)
+    {
         $this->serverType = $serverType;
 
         // set_exception_handler(
@@ -102,32 +100,32 @@ class Server implements ServerInterface
         //     }
         // );
 
-        $this->showLogo();
-
         $container = $this->generateContainer();
 
+        $container->set(ServerInterface::class, $this);
+
         if (!$container instanceof ContainerInterface) {
-            throw new InvalidArgumentException('Expected a ContainerInterface');
+            throw new InvalidArgumentException(
+                i18n(
+                    'Expected a %s.',
+                    ContainerInterface::class
+                )
+            );
         }
 
         $this->container = $container;
-
-        $this->container->set(ServerInterface::class, $this);
-
         $this->eventManager = $this->generateEventManager();
         
         // 生命周期函数initialize
         $this->initialize();
 
-        $this->displayServerInfo();
-
-        $this->createServer();
-
+        $this->swooleServer = $this->createServer();
+        
         // Cache::getInstance(); // TODO
         // Cluster::getInstance()->run();// TODO
         // CronTab::getInstance()->run();// TODO
 
-        $this->attachListener();
+        $this->addSwooleListener();
 
         $this->isStart = true;
     }
@@ -202,7 +200,7 @@ class Server implements ServerInterface
         // TODO add options here
         throw new Exception('Please override me and add options here.');
 
-        $this->createMainServer($options);
+        return $this->createSwooleServer($options);
     }
 
     /**
@@ -224,6 +222,7 @@ class Server implements ServerInterface
      */
     protected function initialize()
     {
+        // TODO 子类扩展
     }
 
     /**
@@ -236,504 +235,75 @@ class Server implements ServerInterface
     }
 
     /**
-     * create container
+     * 穿件注入容器，如果采用其他实现，可以在子类覆盖此方法
      * 
-     * 需要替换默认的container，覆盖此方法
-     *
      * @return ContainerInterface
      */
     protected function generateContainer()
     {
-        return new Container();
+        $container = new Container();
+
+        return $container;
     }
 
     /**
+     * 创建事件管理器，如果采用其他实现，可以在子类覆盖此方法
      * 
-     * 
-     * 
-     *
-     * @return 
+     * @return EventManagerInterface
      */
     protected function generateEventManager()
     {
-        return new EventManager();
+        $eventManager = new EventManager();
+
+        $this->container->set(EventManagerInterface::class, $eventManager);
+
+        return $eventManager;
     }
 
     /**
-     * Enable access to the DI container by consumers of $app
+     * 注入容器
      *
      * @return ContainerInterface
      */
-    public function getContainer()
+    final public function container()
     {
         return $this->container;
     }
 
-    public function getEventManager()
+    /**
+     * 事件管理器
+     *
+     * @return EventManagerInterface
+     */
+    final public function eventManager()
     {
         return $this->eventManager;
     }
 
     /**
-     * Run application
-     *
-     * This method traverses the application middleware stack and then sends the
-     * resultant Response object to the HTTP client.
-     *
-     * @param bool|false $silent
-     * @return ResponseInterface
-     *
-     * @throws Exception
-     * @throws MethodNotAllowed
-     * @throws RouteNotFound
-     */
-    public function run($silent = false)
-    {
-        $this->getServer()->start();
-
-        $response = $this->response;
-
-        try {
-            ob_start();
-            $response = $this->process($this->request, $response);
-        } catch (MethodInvalid $e) {
-            $response = $this->processInvalidMethod($e->getRequest(), $response);
-        }
-        finally {
-            $output = ob_get_clean();
-        }
-
-        if (!empty($output) && $response->getBody()->isWritable()) {
-            $outputBuffering = $this->container->get('settings')['outputBuffering'];
-            if ($outputBuffering === 'prepend') {
-                // prepend output buffer content
-                $body = new Http\Body(fopen('php://temp', 'r+'));
-                $body->write($output . $response->getBody());
-                $response = $response->withBody($body);
-            } elseif ($outputBuffering === 'append') {
-                // append output buffer content
-                $response->getBody()->write($output);
-            }
-        }
-
-        $response = $this->finalize($response);
-
-        if (!$silent) {
-            $this->respond($response);
-        }
-
-        return $response;
-    }
-
-    /**
-     * Pull route info for a request with a bad method to decide whether to
-     * return a not-found error (default) or a bad-method error, then run
-     * the handler for that error, returning the resulting response.
-     *
-     * Used for cases where an incoming request has an unrecognized method,
-     * rather than throwing an exception and not catching it all the way up.
-     *
-     * @param ServerRequestInterface $request
-     * @param ResponseInterface $response
-     * @return ResponseInterface
-     */
-    protected function processInvalidMethod(
-        ServerRequestInterface $request,
-        ResponseInterface $response
-    ) {
-        $router = $this->container->get('router');
-        if (is_callable([$request->getUri(), 'getBasePath']) && is_callable([$router, 'setBasePath'])) {
-            $router->setBasePath($request->getUri()->getBasePath());
-        }
-
-        $request = $this->dispatchRouterAndPrepareRoute($request, $router);
-        $routeInfo = $request->getAttribute('routeInfo', [RouterInterface::DISPATCH_STATUS => Dispatcher::NOT_FOUND]);
-
-        if ($routeInfo[RouterInterface::DISPATCH_STATUS] === Dispatcher::METHOD_NOT_ALLOWED) {
-            return $this->handleException(
-                new MethodNotAllowed($request, $response, $routeInfo[RouterInterface::ALLOWED_METHODS]),
-                $request,
-                $response
-            );
-        }
-
-        return $this->handleException(new RouteNotFound($request, $response), $request, $response);
-    }
-
-    /**
-     * Process a request
-     *
-     * This method traverses the application middleware stack and then returns the
-     * resultant Response object.
-     *
-     * @param ServerRequestInterface $request
-     * @param ResponseInterface $response
-     * @return ResponseInterface
-     *
-     * @throws Exception
-     * @throws MethodNotAllowed
-     * @throws RouteNotFound
-     */
-    public function process(
-        ServerRequestInterface $request,
-        ResponseInterface $response
-    ) {
-        // Ensure basePath is set
-        $router = $this->container->get('router');
-
-        if (is_callable([$request->getUri(), 'getBasePath']) && is_callable([$router, 'setBasePath'])) {
-            $router->setBasePath($request->getUri()->getBasePath());
-        }
-
-        // Dispatch router (note: you won't be able to alter routes after this)
-        $request = $this->dispatchRouterAndPrepareRoute($request, $router);
-
-        // Traverse middleware stack
-        try {
-            $response = $this->callMiddlewareStack($request, $response);
-        } catch (Exception $e) {
-            $response = $this->handleException($e, $request, $response);
-        } catch (Throwable $e) {
-            $response = $this->handlePhpError($e, $request, $response);
-        }
-
-        return $response;
-    }
-
-    /**
-     * Send the response to the client
-     *
-     * @param ResponseInterface $response
-     */
-    public function respond(ResponseInterface $response)
-    {
-        // Send response
-        if (!headers_sent()) {
-            // Headers
-            foreach ($response->getHeaders() as $name => $values) {
-                foreach ($values as $value) {
-                    header(i18n('%s: %s', $name, $value), false);
-                }
-            }
-
-            // Set the status _after_ the headers, because of PHP's "helpful" behavior with location headers.
-            // See https://github.com/slimphp/Swoole/issues/1730
-
-            // Status
-            header(i18n(
-                'HTTP/%s %s %s',
-                $response->getProtocolVersion(),
-                $response->getStatusCode(),
-                $response->getReasonPhrase()
-            ));
-        }
-
-        // Body
-        if (!$this->isEmptyResponse($response)) {
-            $body = $response->getBody();
-            if ($body->isSeekable()) {
-                $body->rewind();
-            }
-            $settings = $this->container->get('settings');
-            $chunkSize = $settings['responseChunkSize'];
-
-            $contentLength = $response->getHeaderLine('Content-Length');
-            if (!$contentLength) {
-                $contentLength = $body->getSize();
-            }
-
-
-            if (isset($contentLength)) {
-                $amountToRead = $contentLength;
-                while ($amountToRead > 0 && !$body->eof()) {
-                    $data = $body->read(min($chunkSize, $amountToRead));
-                    echo $data;
-
-                    $amountToRead -= strlen($data);
-
-                    if (connection_status() != CONNECTION_NORMAL) {
-                        break;
-                    }
-                }
-            } else {
-                while (!$body->eof()) {
-                    echo $body->read($chunkSize);
-                    if (connection_status() != CONNECTION_NORMAL) {
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Invoke application
-     *
-     * This method implements the middleware interface. It receives
-     * Request and Response objects, and it returns a Response object
-     * after compiling the routes registered in the Router and dispatching
-     * the Request object to the appropriate Route callback routine.
-     *
-     * @param  ServerRequestInterface $request  The most recent Request object
-     * @param  ResponseInterface      $response The most recent Response object
-     *
-     * @return ResponseInterface
-     * @throws MethodNotAllowed
-     * @throws RouteNotFound
-     */
-    public function __invoke(ServerRequestInterface $request, ResponseInterface $response)
-    {
-        // Get the route info
-        $routeInfo = $request->getAttribute('routeInfo');
-
-        /** @var \Sinpe\Route\RouterInterface $router */
-        $router = $this->container->get('router');
-
-        // If router hasn't been dispatched or the URI changed then dispatch
-        if (null === $routeInfo
-            || ($routeInfo['request'] !== [$request->getMethod(), (string)$request->getUri()])) {
-            $request = $this->dispatchRouterAndPrepareRoute($request, $router);
-            $routeInfo = $request->getAttribute('routeInfo');
-        }
-
-        if ($routeInfo[0] === Dispatcher::FOUND) {
-            $route = $router->lookupRoute($routeInfo[1]);
-            return $route->run($request, $response);
-        } elseif ($routeInfo[0] === Dispatcher::METHOD_NOT_ALLOWED) {
-            // if (!$this->container->has('notAllowedHandler')) {
-            throw new MethodNotAllowed($request, $response, $routeInfo[1]);
-            // }
-            // /** @var callable $notAllowedHandler */
-            // $notAllowedHandler = $this->container->get('notAllowedHandler');
-
-            // return $notAllowedHandler($request, $response, $routeInfo[1]);
-        }
-        
-        // if (!$this->container->has('notFoundHandler')) {
-        throw new RouteNotFound($request, $response);
-        // }
-        
-        // /** @var callable $notFoundHandler */
-        // $notFoundHandler = $this->container->get('notFoundHandler');
-        
-        // return $notFoundHandler($request, $response);
-    }
-
-    /**
-     * Perform a sub-request from within an application route
-     *
-     * This method allows you to prepare and initiate a sub-request, run within
-     * the context of the current request. This WILL NOT issue a remote HTTP
-     * request. Instead, it will route the provided URL, method, headers,
-     * cookies, body, and server variables against the set of registered
-     * application routes. The result response object is returned.
-     *
-     * @param  string            $method      The request method (e.g., GET, POST, PUT, etc.)
-     * @param  string            $path        The request URI path
-     * @param  string            $query       The request URI query string
-     * @param  array             $headers     The request headers (key-value array)
-     * @param  array             $cookies     The request cookies (key-value array)
-     * @param  string            $bodyContent The request body
-     * @param  ResponseInterface $response     The response object (optional)
-     * @return ResponseInterface
-     */
-    public function subRequest(
-        $method,
-        $path,
-        $query = '',
-        array $headers = [],
-        array $cookies = [],
-        $bodyContent = '',
-        ResponseInterface $response = null
-    ) {
-        $env = $this->container->get('environment');
-        $uri = Uri::createFromEnvironment($env)->withPath($path)->withQuery($query);
-        $headers = new Headers($headers);
-        $serverParams = $env->all();
-        $body = new Body(fopen('php://temp', 'r+'));
-        $body->write($bodyContent);
-        $body->rewind();
-        $request = new Request($method, $uri, $headers, $cookies, $serverParams, $body);
-
-        if (!$response) {
-            $response = $this->response;
-        }
-
-        return $this($request, $response);
-    }
-
-    /**
-     * Dispatch the router to find the route. Prepare the route for use.
-     *
-     * @param ServerRequestInterface $request
-     * @param RouterInterface        $router
-     * @return ServerRequestInterface
-     */
-    protected function dispatchRouterAndPrepareRoute(ServerRequestInterface $request, RouterInterface $router)
-    {
-        $routeInfo = $router->dispatch($request);
-
-        if ($routeInfo[0] === Dispatcher::FOUND) {
-            $routeArguments = [];
-            foreach ($routeInfo[2] as $k => $v) {
-                $routeArguments[$k] = urldecode($v);
-            }
-
-            $route = $router->lookupRoute($routeInfo[1]);
-            $route->prepare($request, $routeArguments);
-
-            // add route to the request's attributes in case a middleware or handler needs access to the route
-            $request = $request->withAttribute('route', $route);
-        }
-
-        $routeInfo['request'] = [$request->getMethod(), (string)$request->getUri()];
-
-        return $request->withAttribute('routeInfo', $routeInfo);
-    }
-
-    /**
-     * Finalize response
-     *
-     * @param ResponseInterface $response
-     * @return ResponseInterface
-     */
-    protected function finalize(ResponseInterface $response)
-    {
-        // stop PHP sending a Content-Type automatically
-        ini_set('default_mimetype', '');
-
-        if ($this->isEmptyResponse($response)) {
-            return $response->withoutHeader('Content-Type')->withoutHeader('Content-Length');
-        }
-
-        // Add Content-Length header if `addContentLengthHeader` setting is set
-        if (isset($this->container->get('settings')['addContentLengthHeader']) &&
-            $this->container->get('settings')['addContentLengthHeader'] == true) {
-            if (ob_get_length() > 0) {
-                throw new \RuntimeException("Unexpected data in output buffer. " .
-                    "Maybe you have characters before an opening <?php tag?");
-            }
-            $size = $response->getBody()->getSize();
-            if ($size !== null && !$response->hasHeader('Content-Length')) {
-                $response = $response->withHeader('Content-Length', (string)$size);
-            }
-        }
-
-        return $response;
-    }
-
-    /**
-     * 额外的
-     * 
-     * @param  Exception $e
-     * @param  ServerRequestInterface $request
-     * @param  ResponseInterface $response
-     *
-     * @return void
-     */
-    protected function HandleYours(Exception $e, ServerRequestInterface $request, ResponseInterface $response)
-    {
-    }
-
-    /**
-     * Call relevant handler from the Container if needed. If it doesn't exist,
-     * then just re-throw.
-     *
-     * @param  Exception $e
-     * @param  ServerRequestInterface $request
-     * @param  ResponseInterface $response
-     *
-     * @return ResponseInterface
-     * @throws Exception if a handler is needed and not found
-     */
-    protected function handleException(Exception $e, ServerRequestInterface $request, ResponseInterface $response)
-    {
-        $this->HandleYours($e, $request, $response);
-
-        if ($e instanceof MethodNotAllowed) {
-            $handler = 'notAllowedHandler';
-            $params = [$e->getRequest(), $e->getResponse(), $e->getAllowedMethods()];
-        } elseif ($e instanceof RouteNotFound) {
-            $handler = 'notFoundHandler';
-            $params = [$e->getRequest(), $e->getResponse(), $e];
-        } elseif ($e instanceof SwooleException) {
-            // This is a Stop exception and contains the response
-            return $e->getResponse();
-        } else {
-            // Other exception, use $request and $response params
-            $handler = 'errorHandler';
-            $params = [$request, $response, $e];
-        }
-
-        if ($this->container->has($handler)) {
-            $callable = $this->container->get($handler);
-            // Call the registered handler
-            return call_user_func_array($callable, $params);
-        }
-
-        // No handlers found, so just throw the exception
-        throw $e;
-    }
-
-    /**
-     * Call relevant handler from the Container if needed. If it doesn't exist,
-     * then just re-throw.
-     *
-     * @param  Throwable $e
-     * @param  ServerRequestInterface $request
-     * @param  ResponseInterface $response
-     * @return ResponseInterface
-     * @throws Throwable
-     */
-    protected function handlePhpError(Throwable $e, ServerRequestInterface $request, ResponseInterface $response)
-    {
-        $handler = 'phpErrorHandler';
-        $params = [$request, $response, $e];
-
-        if ($this->container->has($handler)) {
-            $callable = $this->container->get($handler);
-            // Call the registered handler
-            return call_user_func_array($callable, $params);
-        }
-
-        // No handlers found, so just throw the exception
-        throw $e;
-    }
-
-    /**
      * 
      */
-    public function addServer(
+    public function addSwooleServer(
         string $name,
         int $port,
-        int $type = SWOOLE_TCP,
+        int $type = Swoole::SOCKTYPE_TCP,
         string $host = '0.0.0.0',
         array $setting = [
             "open_eof_check" => false,
         ]
-    ) : Event {
+    ) {
 
-        $eventRegister = new EventManager();
+        $eventManager = new EventManager();
 
-        $this->servers[$name] = [
+        $this->moreSwooleServers[$name] = [
             'port' => $port,
             'host' => $host,
             'type' => $type,
             'setting' => $setting,
-            'eventRegister' => $eventRegister
+            'eventManager' => $eventManager
         ];
 
-        return $eventRegister;
-    }
-
-    /**
-     * Undocumented function
-     *
-     * @return boolean
-     */
-    public function isStart() : bool
-    {
-        return $this->isStart;
+        return $eventManager;
     }
 
     /**
@@ -741,38 +311,46 @@ class Server implements ServerInterface
      *
      * @return void
      */
-    private function attachListener() : void
+    private function addSwooleListener() : void
     {
-        $mainServer = $this->getServer();
+        foreach ($this->moreSwooleServers as $name => $server) {
 
-        foreach ($this->servers as $name => $server) {
-
-            $subPort = $mainServer->addlistener($server['host'], $server['port'], $server['type']);
+            $subPort = $this->swooleServer->addlistener(
+                $server['host'],
+                $server['port'],
+                $server['type']
+            );
 
             if ($subPort) {
-                $this->servers[$name] = $subPort;
+
+                $this->moreSwooleServers[$name] = $subPort;
 
                 if (is_array($server['setting'])) {
                     $subPort->set($server['setting']);
                 }
 
-                $events = $server['eventRegister']->all();
+                $eventManager = $server['eventManager'];
 
-                foreach ($events as $event => $callback) {
-                    $subPort->on($event, function () use ($callback) {
-                        $ret = [];
-                        $args = func_get_args();
-                        foreach ($callback as $item) {
-                            array_push($ret, Invoker::callUserFuncArray($item, $args));
+                $reflect = new ReflectionClass(SwooleEvent::class);
+
+                foreach ($reflect->getConstants() as $event) {
+                    $subPort->on(
+                        $event,
+                        function () use ($eventManager) {
+                            return $eventManager->fire($event, $this, func_get_args());
                         }
-                        if (count($ret) > 1) {
-                            return $ret;
-                        }
-                        return array_shift($ret);
-                    });
+                    );
                 }
+
             } else {
-                throw new Exception("addListener with server name:{$name} at host:{$server['host']} port:{$server['port']} fail");
+                throw new Exception(
+                    i18n(
+                        'addListener with server name:%s at host:%s port:%s fail.',
+                        $name,
+                        $server['host'],
+                        $server['port']
+                    )
+                );
             }
         }
     }
@@ -783,7 +361,7 @@ class Server implements ServerInterface
      * @param array $options
      * @return void
      */
-    protected function createMainServer(array $options) : \swoole_server
+    protected function createSwooleServer(array $options) : \swoole_server
     {
         $host = $options['host'];
         $port = $options['port'];
@@ -792,13 +370,28 @@ class Server implements ServerInterface
 
         switch ($this->serverType()) {
             case self::TYPE_SERVER:
-                $this->mainServer = new \swoole_server($host, $port, $runModel, $sockType);
+                $swooleServer = new \swoole_server(
+                    $host,
+                    $port,
+                    $runModel,
+                    $sockType
+                );
                 break;
             case self::TYPE_HTTP:
-                $this->mainServer = new \swoole_http_server($host, $port, $runModel, $sockType);
+                $swooleServer = new \swoole_http_server(
+                    $host,
+                    $port,
+                    $runModel,
+                    $sockType
+                );
                 break;
             case self::TYPE_WEB_SOCKET:
-                $this->mainServer = new \swoole_websocket_server($host, $port, $runModel, $sockType);
+                $swooleServer = new \swoole_websocket_server(
+                    $host,
+                    $port,
+                    $runModel,
+                    $sockType
+                );
                 break;
             default:
                 throw new Exception(
@@ -809,16 +402,16 @@ class Server implements ServerInterface
                 );
         }
 
-        $this->mainServer->set($options['swoole_settings']);
+        $swooleServer->set($options['swoole_settings']);
 
-        $defaultEvents = $this->container->make(DefaultEventsProvider::class);
-
-        $defaultEvents->register($this, $this->eventManager);
+        // 默认事件
+        $this->container->make(DefaultEventsProvider::class)
+            ->register($this, $this->eventManager);
 
         $reflect = new ReflectionClass(SwooleEvent::class);
 
         foreach ($reflect->getConstants() as $event) {
-            $this->mainServer->on(
+            $swooleServer->on(
                 $event,
                 function () {
                     return $this->eventManager->fire($event, $this, func_get_args());
@@ -826,21 +419,21 @@ class Server implements ServerInterface
             );
         }
 
-        return $this->mainServer;
+        return $swooleServer;
     }
 
     /**
      * @param string $name
      * @return null|\swoole_server|\swoole_server_port
      */
-    public function getServer($name = null)
+    public function getSwooleServer($name = null)
     {
-        if ($this->mainServer) {
+        if ($this->swooleServer) {
             if ($name === null) {
-                return $this->mainServer;
+                return $this->swooleServer;
             } else {
-                if (isset($this->servers[$name])) {
-                    return $this->servers[$name];
+                if (isset($this->moreSwooleServers[$name])) {
+                    return $this->moreSwooleServers[$name];
                 }
                 return null;
             }
@@ -858,9 +451,10 @@ class Server implements ServerInterface
     {
         if (class_exists('Swoole\Coroutine')) {
             //进程错误或不在协程中的时候返回-1
-            $ret = Coroutine::getuid();
-            if ($ret >= 0) {
-                return $ret;
+            $result = \Swoole\Coroutine::getuid();
+
+            if ($result >= 0) {
+                return $result;
             } else {
                 return null;
             }
@@ -881,6 +475,16 @@ class Server implements ServerInterface
         } else {
             return false;
         }
+    }
+
+    /**
+     * Undocumented function
+     *
+     * @return boolean
+     */
+    public function isStart() : bool
+    {
+        return $this->isStart;
     }
 
 }

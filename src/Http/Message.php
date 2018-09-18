@@ -218,7 +218,7 @@ abstract class Message implements MessageInterface
     public function withHeader($name, $value)
     {
         $clone = clone $this;
-        $clone->headers->set($name, $value);
+        $clone->headers->put($name, $value);
 
         return $clone;
     }

@@ -8,10 +8,7 @@
  */
 namespace Sinpe\Swoole\Exceptions;
 
-use Psr\Http\Message\ServerRequestInterface;
-use Psr\Http\Message\ResponseInterface;
-
-use Sinpe\Swoole\Exception;
+use Exception;
 
 class MethodNotAllowed extends Exception
 {
@@ -29,12 +26,8 @@ class MethodNotAllowed extends Exception
      * @param ResponseInterface $response
      * @param string[] $allowedMethods
      */
-    public function __construct(
-        ServerRequestInterface $request, 
-        ResponseInterface $response, 
-        array $allowedMethods
-    ) {
-        parent::__construct($request, $response);
+    public function __construct(array $allowedMethods) 
+    {
         $this->allowedMethods = $allowedMethods;
     }
 
