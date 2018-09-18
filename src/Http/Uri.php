@@ -199,7 +199,7 @@ class Uri implements UriInterface
      */
     public static function createFromEnvironment(Environment $env)
     {
-        $scheme = strpos($env->get('server_protocol'), 'HTTPS') === 0 ? 'https' : 'http';
+        $scheme = strpos($env->get('SERVER_PROTOCOL'), 'HTTPS') === 0 ? 'https' : 'http';
 
         // // Authority: Username and password
         // $username = $env->get('PHP_AUTH_USER', '');
@@ -212,9 +212,9 @@ class Uri implements UriInterface
         //     $host = $env->get('SERVER_NAME');
         // }
 
-        $host = (int)$env->get('remote_addr', '127.0.0.1');
+        $host = (int)$env->get('REMOTE_ADDR', '127.0.0.1');
         // Authority: Port
-        $port = (int)$env->get('server_port', 80);
+        $port = (int)$env->get('SERVER_PORT', 80);
 
         // if (preg_match('/^(\[[a-fA-F0-9:.]+\])(:\d+)?\z/', $host, $matches)) {
         //     $host = $matches[1];
@@ -236,7 +236,7 @@ class Uri implements UriInterface
 
         // parse_url() requires a full URL. As we don't extract the domain name or scheme,
         // we use a stand-in.
-        $requestUri = parse_url('http://example.com' . $env->get('request_uri'), PHP_URL_PATH);
+        $requestUri = parse_url('http://example.com' . $env->get('REQUEST_URI'), PHP_URL_PATH);
 
         $basePath = '';
         $virtualPath = $requestUri;
@@ -252,10 +252,10 @@ class Uri implements UriInterface
         // }
 
         // Query string
-        $queryString = $env->get('query_string', '');
+        $queryString = $env->get('QUERY_STRING', '');
 
         if ($queryString === '') {
-            $queryString = parse_url('http://example.com' . $env->get('request_uri'), PHP_URL_QUERY);
+            $queryString = parse_url('http://example.com' . $env->get('REQUEST_URI'), PHP_URL_QUERY);
         }
 
         // // Fragment

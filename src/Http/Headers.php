@@ -43,18 +43,20 @@ class Headers extends Collection implements HeadersInterface
      * Create new headers collection with data extracted from
      * the application Environment object
      *
-     * @param Environment $environment The application Environment
+     * @param array $environment The application Environment
      *
      * @return self
      */
-    public static function createFromEnvironment(Environment $environment)
+    public static function createFrom(array $environment)
     {
         $data = [];
 
-        $environment = self::determineAuthorization($environment);
+        // $environment = self::determineAuthorization($environment);
 
         foreach ($environment as $key => $value) {
+            
             $key = strtoupper($key);
+
             if (isset(static::$special[$key]) || strpos($key, 'HTTP_') === 0) {
                 if ($key !== 'HTTP_CONTENT_LENGTH') {
                     $data[$key] =  $value;
@@ -80,7 +82,9 @@ class Headers extends Collection implements HeadersInterface
 
         if (empty($authorization) && is_callable('getallheaders')) {
             $headers = getallheaders();
+
             $headers = array_change_key_case($headers, CASE_LOWER);
+
             if (isset($headers['authorization'])) {
                 $environment->put('HTTP_AUTHORIZATION', $headers['authorization']);
             }

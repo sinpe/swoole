@@ -158,7 +158,11 @@ class Request extends Message implements ServerRequestInterface
 
         $environment = new Environment($request->server);
 
-        $method = $environment->get('request_method');
+        $environment = $environment->keyBy(function ($item, $key) {
+            return strtoupper($key);
+        });
+
+        $method = $environment->get('REQUEST_METHOD');
 
         if ($method === 'POST' &&
             in_array($this->getMediaType(), ['application/x-www-form-urlencoded', 'multipart/form-data'])) {
@@ -173,21 +177,21 @@ class Request extends Message implements ServerRequestInterface
         }
 
         $this->uri = Uri::createFromEnvironment($environment);
-        // TODO
-        $this->headers = Headers::createFromEnvironment($environment);
-        $this->cookies = Cookies::parseHeader($this->headers->get('Cookie', []));
+        $this->headers = Headers::createFrom($request->header ?? []);
+        $this->cookies = new Cookies($request->cookie ?? []);// Cookies::parseHeader($this->headers->get('Cookie', []));
+
         $this->serverParams = $environment->all();
         $this->attributes = new Collection();
         $this->body = new RequestBody();
-        $this->uploadedFiles = UploadedFile::createFromEnvironment($environment);
+        $this->uploadedFiles = UploadedFile::createFromEnvironment($request->files ?? []);
 
         if (isset($serverParams['SERVER_PROTOCOL'])) {
             $this->protocolVersion = str_replace('HTTP/', '', $serverParams['SERVER_PROTOCOL']);
         }
 
-        if (!$this->headers->has('Host') && $this->uri->getHost() !== '') {
+        if (!$this->headers->has('HOST') && $this->uri->getHost() !== '') {
             $port = $this->uri->getPort() ? ":{$this->uri->getPort()}" : '';
-            $this->headers->put('Host', $this->uri->getHost() . $port);
+            $this->headers->put('HOST', $this->uri->getHost() . $port);
         }
 
         $this->registerMediaTypeParser('application/json', function ($input) {
@@ -247,10 +251,6 @@ class Request extends Message implements ServerRequestInterface
         $this->attributes = clone $this->attributes;
         $this->body = clone $this->body;
     }
-
-    /*******************************************************************************
-     * Method
-     ******************************************************************************/
 
     /**
      * Retrieves the HTTP method of the request.
@@ -453,10 +453,6 @@ class Request extends Message implements ServerRequestInterface
     {
         return $this->getHeaderLine('X-Requested-With') === 'XMLHttpRequest';
     }
-
-    /*******************************************************************************
-     * URI
-     ******************************************************************************/
 
     /**
      * Retrieves the message's request target.
@@ -677,10 +673,6 @@ class Request extends Message implements ServerRequestInterface
         return $result ? (int)$result[0] : null;
     }
 
-    /*******************************************************************************
-     * Cookies
-     ******************************************************************************/
-
     /**
      * Retrieve cookies.
      *
@@ -742,10 +734,6 @@ class Request extends Message implements ServerRequestInterface
         return $clone;
     }
 
-    /*******************************************************************************
-     * Query Params
-     ******************************************************************************/
-
     /**
      * Retrieve query string arguments.
      *
@@ -802,10 +790,6 @@ class Request extends Message implements ServerRequestInterface
 
         return $clone;
     }
-
-    /*******************************************************************************
-     * File Params
-     ******************************************************************************/
 
     /**
      * Retrieve normalized file upload data.
