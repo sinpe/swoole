@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Swoole+ Framework (https://slimframework.com)
  *
@@ -54,17 +55,30 @@ class Headers extends Collection implements HeadersInterface
         // $environment = self::determineAuthorization($environment);
 
         foreach ($environment as $key => $value) {
-            
-            $key = strtoupper($key);
+
+            $key = strtoupper(str_replace('-', '_', $key));
 
             if (isset(static::$special[$key]) || strpos($key, 'HTTP_') === 0) {
                 if ($key !== 'HTTP_CONTENT_LENGTH') {
-                    $data[$key] =  $value;
+                    $data[$key] = $value;
                 }
             }
         }
 
         return new static($data);
+    }
+
+    /**
+     * Create a new collection.
+     *
+     * @param  mixed  $items
+     * @return void
+     */
+    final public function __construct($items = [])
+    {
+        foreach ($items as $key => $value) {
+            $this->put($key, $value);
+        }
     }
 
     /**
@@ -81,6 +95,7 @@ class Headers extends Collection implements HeadersInterface
         $authorization = $environment->get('HTTP_AUTHORIZATION');
 
         if (empty($authorization) && is_callable('getallheaders')) {
+
             $headers = getallheaders();
 
             $headers = array_change_key_case($headers, CASE_LOWER);
@@ -103,7 +118,9 @@ class Headers extends Collection implements HeadersInterface
     public function all()
     {
         $all = parent::all();
+
         $out = [];
+
         foreach ($all as $key => $props) {
             $out[$props['originalKey']] = $props['value'];
         }
@@ -120,12 +137,13 @@ class Headers extends Collection implements HeadersInterface
      * @param string $key   The case-insensitive header name
      * @param string $value The header value
      */
-    public function set($key, $value)
+    public function put($key, $value)
     {
         if (!is_array($value)) {
             $value = [$value];
         }
-        parent::set($this->normalizeKey($key), [
+
+        parent::put($this->normalizeKey($key), [
             'value' => $value,
             'originalKey' => $key
         ]);
@@ -168,7 +186,7 @@ class Headers extends Collection implements HeadersInterface
     /**
      * Add HTTP header value
      *
-     * This method appends a header value. Unlike the set() method,
+     * This method appends a header value. Unlike the put() method,
      * this method _appends_ this new value to any values
      * that already exist for this header name.
      *
@@ -178,9 +196,10 @@ class Headers extends Collection implements HeadersInterface
     public function add($key, $value)
     {
         $oldValues = $this->get($key, []);
+
         $newValues = is_array($value) ? $value : [$value];
-        
-        $this->put($key, array_merge($oldValues, array_values($newValues)));
+
+        $this->put($this->normalizeKey($key), array_merge($oldValues, array_values($newValues)));
     }
 
     /**
@@ -218,11 +237,15 @@ class Headers extends Collection implements HeadersInterface
      */
     public function normalizeKey($key)
     {
+        // TODO 多次调用计算，待优化
+
         $key = strtr(strtolower($key), '_', '-');
+
         if (strpos($key, 'http-') === 0) {
             $key = substr($key, 5);
         }
 
-        return $key;
+        return str_replace(' ', '-', ucwords(str_replace('-', ' ', $key)));
     }
+
 }

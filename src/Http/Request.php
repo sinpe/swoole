@@ -162,6 +162,10 @@ class Request extends Message implements ServerRequestInterface
             return strtoupper($key);
         });
 
+        $this->uri = Uri::createFromEnvironment($environment);
+        $this->headers = Headers::createFrom($request->header ?? []);
+        $this->cookies = new Cookies($request->cookie ?? []);// Cookies::parseHeader($this->headers->get('Cookie', []));
+
         $method = $environment->get('REQUEST_METHOD');
 
         if ($method === 'POST' &&
@@ -176,22 +180,19 @@ class Request extends Message implements ServerRequestInterface
             $this->originalMethod = $method;
         }
 
-        $this->uri = Uri::createFromEnvironment($environment);
-        $this->headers = Headers::createFrom($request->header ?? []);
-        $this->cookies = new Cookies($request->cookie ?? []);// Cookies::parseHeader($this->headers->get('Cookie', []));
-
         $this->serverParams = $environment->all();
         $this->attributes = new Collection();
         $this->body = new RequestBody();
+
         $this->uploadedFiles = UploadedFile::createFromEnvironment($request->files ?? []);
 
         if (isset($serverParams['SERVER_PROTOCOL'])) {
             $this->protocolVersion = str_replace('HTTP/', '', $serverParams['SERVER_PROTOCOL']);
         }
 
-        if (!$this->headers->has('HOST') && $this->uri->getHost() !== '') {
+        if (!$this->headers->has('Host') && $this->uri->getHost() !== '') {
             $port = $this->uri->getPort() ? ":{$this->uri->getPort()}" : '';
-            $this->headers->put('HOST', $this->uri->getHost() . $port);
+            $this->headers->put('Host', $this->uri->getHost() . $port);
         }
 
         $this->registerMediaTypeParser('application/json', function ($input) {
@@ -610,6 +611,7 @@ class Request extends Message implements ServerRequestInterface
     public function getMediaType()
     {
         $contentType = $this->getContentType();
+
         if ($contentType) {
             $contentTypeParts = preg_split('/\s*[;,]\s*/', $contentType);
 
