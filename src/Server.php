@@ -66,13 +66,6 @@ class Server implements ServerInterface
      */
     private $swooleServer;
 
-    /**
-     * 运行参数
-     *
-     * @var array
-     */
-    private $options;
-
     private $isStart = false;
 
     /**
@@ -128,56 +121,6 @@ class Server implements ServerInterface
     }
 
     /**
-     * 
-     *
-     * @return void
-     */
-    public function setOptions(array $options = [])
-    {
-        $this->options = $options;
-    }
-
-    /**
-     * 应用名称
-     *
-     * @return void
-     */
-    public function name()
-    {
-        return !empty($this->options['name']) ? $this->options['name'] : 'unknow';
-    }
-
-    /**
-     * 主机
-     *
-     * @return void
-     */
-    public function host()
-    {
-        return !empty($this->options['host']) ? $this->options['host'] : '127.0.0.1';
-    }
-
-    /**
-     * 端口
-     *
-     * @return void
-     */
-    public function port()
-    {
-        return !empty($this->options['port']) ? $this->options['port'] : '8080';
-    }
-
-    /**
-     * worker数
-     *
-     * @return void
-     */
-    public function workerNum()
-    {
-        return !empty($this->options['worker_number']) ? $this->options['worker_number'] : 2;
-    }
-
-    /**
      * Server Type
      *
      * @return void
@@ -197,7 +140,7 @@ class Server implements ServerInterface
         // TODO add options here
         throw new Exception('Please override me and add options here.');
 
-        return $this->createSwooleServer($options);
+        return $this->createSwooleServer($host, $port, $runModel, $sockType, $settings);
     }
 
     /**
@@ -338,12 +281,13 @@ class Server implements ServerInterface
      * @param array $options
      * @return void
      */
-    protected function createSwooleServer(array $options) : \swoole_server
-    {
-        $host = $options['host'];
-        $port = $options['port'];
-        $runModel = $options['run_model'];
-        $sockType = $options['sock_type'];
+    protected function createSwooleServer(
+        string $host,
+        string $port,
+        string $runModel,
+        string $sockType,
+        array $settings
+    ) {
 
         switch ($this->serverType()) {
             case self::TYPE_SERVER:
@@ -379,7 +323,7 @@ class Server implements ServerInterface
                 );
         }
 
-        $swooleServer->set($options['swoole_settings']);
+        $swooleServer->set($settings);
 
         // 默认事件
         $this->container->make(DefaultEventsProvider::class)
