@@ -20,7 +20,7 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
 use Sinpe\Middleware\CallableStrategies\Deferred as DeferredCallable;
-use Sinpe\Swoole\Middleware\HttpAwareTrait;
+use Sinpe\Middleware\HttpAwareTrait;
 use Sinpe\Route\RouteInterface;
 use Sinpe\Route\RouterInterface;
 use Sinpe\Route\Dispatcher;
