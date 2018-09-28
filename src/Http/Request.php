@@ -158,7 +158,15 @@ class Request extends Message implements ServerRequestInterface
 
         $environment = new Environment($request->server);
 
-        $method = $environment->get('request_method');
+        $environment = $environment->keyBy(function ($item, $key) {
+            return strtoupper($key);
+        });
+
+        $this->uri = Uri::createFromEnvironment($environment);
+        $this->headers = Headers::createFrom($request->header ?? []);
+        $this->cookies = new Cookies($request->cookie ?? []);// Cookies::parseHeader($this->headers->get('Cookie', []));
+
+        $method = $environment->get('REQUEST_METHOD');
 
         if ($method === 'POST' &&
             in_array($this->getMediaType(), ['application/x-www-form-urlencoded', 'multipart/form-data'])) {
@@ -172,14 +180,11 @@ class Request extends Message implements ServerRequestInterface
             $this->originalMethod = $method;
         }
 
-        $this->uri = Uri::createFromEnvironment($environment);
-        // TODO
-        $this->headers = Headers::createFromEnvironment($environment);
-        $this->cookies = Cookies::parseHeader($this->headers->get('Cookie', []));
         $this->serverParams = $environment->all();
         $this->attributes = new Collection();
         $this->body = new RequestBody();
-        $this->uploadedFiles = UploadedFile::createFromEnvironment($environment);
+
+        $this->uploadedFiles = UploadedFile::createFromEnvironment($request->files ?? []);
 
         if (isset($serverParams['SERVER_PROTOCOL'])) {
             $this->protocolVersion = str_replace('HTTP/', '', $serverParams['SERVER_PROTOCOL']);
@@ -247,10 +252,6 @@ class Request extends Message implements ServerRequestInterface
         $this->attributes = clone $this->attributes;
         $this->body = clone $this->body;
     }
-
-    /*******************************************************************************
-     * Method
-     ******************************************************************************/
 
     /**
      * Retrieves the HTTP method of the request.
@@ -454,10 +455,6 @@ class Request extends Message implements ServerRequestInterface
         return $this->getHeaderLine('X-Requested-With') === 'XMLHttpRequest';
     }
 
-    /*******************************************************************************
-     * URI
-     ******************************************************************************/
-
     /**
      * Retrieves the message's request target.
      *
@@ -614,6 +611,7 @@ class Request extends Message implements ServerRequestInterface
     public function getMediaType()
     {
         $contentType = $this->getContentType();
+
         if ($contentType) {
             $contentTypeParts = preg_split('/\s*[;,]\s*/', $contentType);
 
@@ -677,10 +675,6 @@ class Request extends Message implements ServerRequestInterface
         return $result ? (int)$result[0] : null;
     }
 
-    /*******************************************************************************
-     * Cookies
-     ******************************************************************************/
-
     /**
      * Retrieve cookies.
      *
@@ -742,10 +736,6 @@ class Request extends Message implements ServerRequestInterface
         return $clone;
     }
 
-    /*******************************************************************************
-     * Query Params
-     ******************************************************************************/
-
     /**
      * Retrieve query string arguments.
      *
@@ -802,10 +792,6 @@ class Request extends Message implements ServerRequestInterface
 
         return $clone;
     }
-
-    /*******************************************************************************
-     * File Params
-     ******************************************************************************/
 
     /**
      * Retrieve normalized file upload data.

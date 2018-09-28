@@ -267,10 +267,6 @@ abstract class Message implements MessageInterface
         return $clone;
     }
 
-    /*******************************************************************************
-     * Body
-     ******************************************************************************/
-
     /**
      * Gets the body of the message.
      *

@@ -60,13 +60,6 @@ trait ServerHttpTrait
      */
     public function __construct()
     {
-        // set_exception_handler(
-        //     function ($e) use ($request, $response) {
-        //         $response = $this->handleException($e, $request, $response);
-        //         $this->end($response);
-        //     }
-        // );
-
         parent::__construct(Server::TYPE_HTTP);
 
         $this->registerRoutes();
@@ -90,7 +83,7 @@ trait ServerHttpTrait
      */
     public function before($callable)
     {
-        return $this->pushToBefore(new DeferredCallable($callable, $this->container()));
+        return $this->pushToBefore(new DeferredCallable($callable, $this->container));
     }
 
     /**
@@ -103,7 +96,7 @@ trait ServerHttpTrait
      */
     public function after($callable)
     {
-        return $this->pushToAfter(new DeferredCallable($callable, $this->container()));
+        return $this->pushToAfter(new DeferredCallable($callable, $this->container));
     }
 
     /**
@@ -208,7 +201,7 @@ trait ServerHttpTrait
      */
     public function map(array $methods, $pattern, $callable)
     {
-        $container = $this->container();
+        $container = $this->container;
 
         if ($callable instanceof Closure) {
             $callable = $callable->bindTo($container);
@@ -259,7 +252,7 @@ trait ServerHttpTrait
      */
     public function group($pattern, $callable)
     {
-        $container = $this->container();
+        $container = $this->container;
 
         $group = $container->get('router')->pushGroup($pattern, $callable);
         $group->setContainer($container);
@@ -318,7 +311,7 @@ trait ServerHttpTrait
 
                 if (!empty($output) && $response->getBody()->isWritable()) {
 
-                    $outputBuffering = $this->container()->get('settings')['outputBuffering'];
+                    $outputBuffering = $this->container->get('settings')['outputBuffering'];
 
                     if ($outputBuffering === 'prepend') {
                         // prepend output buffer content
@@ -360,14 +353,14 @@ trait ServerHttpTrait
         ServerRequestInterface $request,
         ResponseInterface $response
     ) {
-        $router = $this->container()->get('router');
+        $router = $this->container->get('router');
 
         if (is_callable([$request->getUri(), 'getBasePath']) && is_callable([$router, 'setBasePath'])) {
             $router->setBasePath($request->getUri()->getBasePath());
         }
 
         $request = $this->dispatchRouterAndPrepareRoute($request, $router);
-        
+
         $routeInfo = $request->getAttribute('routeInfo', [RouterInterface::DISPATCH_STATUS => Dispatcher::NOT_FOUND]);
 
         if ($routeInfo[RouterInterface::DISPATCH_STATUS] === Dispatcher::METHOD_NOT_ALLOWED) {
@@ -400,12 +393,10 @@ trait ServerHttpTrait
         ResponseInterface $response
     ) {
         // Ensure basePath is set
-        $router = $this->container()->get('router');
+        $router = $this->container->get('router');
 
-        if (
-            is_callable([$request->getUri(), 'getBasePath']) 
-            && is_callable([$router, 'setBasePath'])
-        ) {
+        if (is_callable([$request->getUri(), 'getBasePath'])
+            && is_callable([$router, 'setBasePath'])) {
             $router->setBasePath($request->getUri()->getBasePath());
         }
 
@@ -463,7 +454,7 @@ trait ServerHttpTrait
                 $body->rewind();
             }
 
-            $settings = $this->container()->get('settings');
+            $settings = $this->container->get('settings');
 
             $chunkSize = $settings['responseChunkSize'];
 
@@ -520,7 +511,7 @@ trait ServerHttpTrait
      */
     public function __invoke(ServerRequestInterface $request, ResponseInterface $response)
     {
-        $container = $this->container();
+        $container = $this->container;
 
         // Get the route info
         $routeInfo = $request->getAttribute('routeInfo');
@@ -572,7 +563,7 @@ trait ServerHttpTrait
         $bodyContent = '',
         ResponseInterface $response = null
     ) {
-        $env = $this->container()->get('environment');
+        $env = $this->container->get('environment');
 
         $uri = Uri::createFromEnvironment($env)->withPath($path)->withQuery($query);
         $headers = new Headers($headers);
@@ -635,7 +626,7 @@ trait ServerHttpTrait
             return $response->withoutHeader('Content-Type')->withoutHeader('Content-Length');
         }
 
-        $container = $this->container();
+        $container = $this->container;
 
         // Add Content-Length header if `addContentLengthHeader` setting is set
         if (isset($container->get('settings')['addContentLengthHeader']) &&
@@ -682,7 +673,7 @@ trait ServerHttpTrait
      *
      * @return void
      */
-    protected function HandleYours(Exception $e, ServerRequestInterface $request, ResponseInterface $response)
+    protected function HandleYours(Throwable $e, ServerRequestInterface $request = null, ResponseInterface $response = null)
     {
     }
 
@@ -697,8 +688,14 @@ trait ServerHttpTrait
      * @return ResponseInterface
      * @throws Exception if a handler is needed and not found
      */
-    protected function handleException(Exception $e, ServerRequestInterface $request, ResponseInterface $response)
+    protected function handleException(Throwable $e, ServerRequestInterface $request = null, ResponseInterface $response = null)
     {
+        // TODO 临时
+        if (is_null($request)) {
+            echo $e->getMessage() . '(' . $e->getCode() . ")\r\n\r\n";
+            return;
+        }
+
         $this->HandleYours($e, $request, $response);
 
         if ($e instanceof MethodNotAllowed) {
@@ -713,7 +710,7 @@ trait ServerHttpTrait
             $params = [$request, $response, $e];
         }
 
-        $container = $this->container();
+        $container = $this->container;
 
         if ($container->has($handler)) {
             $callable = $container->get($handler);
@@ -741,7 +738,7 @@ trait ServerHttpTrait
 
         $params = [$request, $response, $e];
 
-        $container = $this->container();
+        $container = $this->container;
 
         if ($container->has($handler)) {
             $callable = $container->get($handler);

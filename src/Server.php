@@ -13,7 +13,9 @@ namespace Sinpe\Swoole;
 use Exception;
 use InvalidArgumentException;
 use ReflectionClass;
+use Throwable;
 
+use Swoole\Exception as SwooleException;
 use Psr\Container\ContainerInterface;
 
 use Sinpe\Event\EventManager;
@@ -64,18 +66,7 @@ class Server implements ServerInterface
      */
     private $swooleServer;
 
-    /**
-     * 运行参数
-     *
-     * @var array
-     */
-    private $options;
-
-
-
     private $isStart = false;
-
-
 
     /**
      * 
@@ -94,9 +85,8 @@ class Server implements ServerInterface
         $this->serverType = $serverType;
 
         // set_exception_handler(
-        //     function ($e) use ($request, $response) {
-        //         $response = $this->handleException($e, $request, $response);
-        //         $this->respond($response);
+        //     function ($e) {
+        //         $this->handleException($e);
         //     }
         // );
 
@@ -131,56 +121,6 @@ class Server implements ServerInterface
     }
 
     /**
-     * 
-     *
-     * @return void
-     */
-    public function setOptions(array $options = [])
-    {
-        $this->options = $options;
-    }
-
-    /**
-     * 应用名称
-     *
-     * @return void
-     */
-    public function name()
-    {
-        return !empty($this->options['name']) ? $this->options['name'] : 'unknow';
-    }
-
-    /**
-     * 主机
-     *
-     * @return void
-     */
-    public function host()
-    {
-        return !empty($this->options['host']) ? $this->options['host'] : '127.0.0.1';
-    }
-
-    /**
-     * 端口
-     *
-     * @return void
-     */
-    public function port()
-    {
-        return !empty($this->options['port']) ? $this->options['port'] : '8080';
-    }
-
-    /**
-     * worker数
-     *
-     * @return void
-     */
-    public function workerNum()
-    {
-        return !empty($this->options['worker_number']) ? $this->options['worker_number'] : 2;
-    }
-
-    /**
      * Server Type
      *
      * @return void
@@ -200,7 +140,7 @@ class Server implements ServerInterface
         // TODO add options here
         throw new Exception('Please override me and add options here.');
 
-        return $this->createSwooleServer($options);
+        return $this->createSwooleServer($host, $port, $runModel, $sockType, $settings);
     }
 
     /**
@@ -258,26 +198,6 @@ class Server implements ServerInterface
         $this->container->set(EventManagerInterface::class, $eventManager);
 
         return $eventManager;
-    }
-
-    /**
-     * 注入容器
-     *
-     * @return ContainerInterface
-     */
-    final public function container()
-    {
-        return $this->container;
-    }
-
-    /**
-     * 事件管理器
-     *
-     * @return EventManagerInterface
-     */
-    final public function eventManager()
-    {
-        return $this->eventManager;
     }
 
     /**
@@ -361,12 +281,13 @@ class Server implements ServerInterface
      * @param array $options
      * @return void
      */
-    protected function createSwooleServer(array $options) : \swoole_server
-    {
-        $host = $options['host'];
-        $port = $options['port'];
-        $runModel = $options['run_model'];
-        $sockType = $options['sock_type'];
+    protected function createSwooleServer(
+        string $host,
+        string $port,
+        string $runModel,
+        string $sockType,
+        array $settings
+    ) {
 
         switch ($this->serverType()) {
             case self::TYPE_SERVER:
@@ -402,7 +323,7 @@ class Server implements ServerInterface
                 );
         }
 
-        $swooleServer->set($options['swoole_settings']);
+        $swooleServer->set($settings);
 
         // 默认事件
         $this->container->make(DefaultEventsProvider::class)
@@ -485,6 +406,67 @@ class Server implements ServerInterface
     public function isStart() : bool
     {
         return $this->isStart;
+    }
+
+    /**
+     * __get
+     *
+     * @return mixed
+     */
+    public function __get($name)
+    {
+        if (in_array($name, ['container', 'eventManager'])) {
+            return $this->{$name};
+        }
+
+        throw new Exception(
+            i18n(
+                'Property %s::%s not exist.',
+                get_class($this),
+                $name
+            )
+        );
+    }
+
+    /**
+     * 额外的
+     * 
+     * @param  Throwable $e
+     *
+     * @return void
+     */
+    protected function HandleYours(Throwable $e)
+    {
+    }
+
+    /**
+     * Call relevant handler from the Container if needed. If it doesn't exist,
+     * then just re-throw.
+     *
+     * @param  Throwable $e
+     *
+     * @throws Exception if a handler is needed and not found
+     */
+    protected function handleException(Throwable $e)
+    {
+        $this->HandleYours($e);
+
+        echo $e->getMessage() . '(' . $e->getCode() . ")\r\n\r\n";
+
+        // // Other exception, use $request and $response params
+        // $handler = 'errorHandler';
+        // $params = [$e];
+
+        // $container = $this->container;
+
+        // if ($container->has($handler)) {
+        //     $callable = $container->get($handler);
+        //     // Call the registered handler
+        //     return call_user_func_array($callable, $params);
+        // }
+
+        // // No handlers found, so just throw the exception
+        // throw $e;
     }
 
 }
