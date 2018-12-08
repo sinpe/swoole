@@ -26,7 +26,7 @@ use Sinpe\IOC\Container as Base;
  *  - errorHandler: a callable with the signature: function($request, $response, $exception)
  *  - notFoundHandler: a callable with the signature: function($request, $response)
  *  - notAllowedHandler: a callable with the signature: function($request, $response, $allowedHttpMethods)
- *  - callableResolver: an instance of \Sinpe\Middleware\ResolverInterface
+ *  - callableResolver: an instance of \Sinpe\Middleware\CallableResolverInterface
  *
  * @property-read array settings
  * @property-read \Swoole\Http\EnvironmentInterface environment
@@ -35,7 +35,7 @@ use Sinpe\IOC\Container as Base;
  * @property-read callable errorHandler
  * @property-read callable notFoundHandler
  * @property-read callable notAllowedHandler
- * @property-read \Sinpe\Middleware\ResolverInterface callableResolver
+ * @property-read \Sinpe\Middleware\CallableResolverInterface callableResolver
  */
 class Container extends Base
 {

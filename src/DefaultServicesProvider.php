@@ -16,19 +16,19 @@ use Sinpe\Route\Router;
 use Sinpe\Route\RouterInterface;
 use Sinpe\Route\Strategies\Autowiring;
 
-use Sinpe\Middleware\Resolver as CallableResolver;
+use Sinpe\Middleware\CallableResolver;
 
 use Sinpe\Swoole\Handlers\PhpError;
 use Sinpe\Swoole\Handlers\Error;
 use Sinpe\Swoole\Handlers\NotFound;
 use Sinpe\Swoole\Handlers\NotAllowed;
 
-use Sinpe\IOC\Container\ServiceProviderInterface;
+use Sinpe\Container\ProviderInterface;
 
 /**
  * Default Service Provider.
  */
-class DefaultServicesProvider implements ServiceProviderInterface
+class DefaultServicesProvider implements ProviderInterface
 {
     /**
      * Register default services.
@@ -159,11 +159,11 @@ class DefaultServicesProvider implements ServiceProviderInterface
 
         if (!isset($container['callableResolver'])) {
             /**
-             * Instance of \Sinpe\Middleware\ResolverInterface
+             * Instance of \Sinpe\Middleware\CallableResolverInterface
              *
              * @param Container $container
              *
-             * @return \Sinpe\Middleware\ResolverInterface
+             * @return \Sinpe\Middleware\CallableResolverInterface
              */
             $container['callableResolver'] = function ($container) {
                 return new CallableResolver($container);
