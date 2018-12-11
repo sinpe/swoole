@@ -12,7 +12,7 @@ namespace Sinpe\Swoole;
 
 use Illuminate\Support\Collection;
 
-use Sinpe\IOC\Container as Base;
+use Sinpe\Container\Container as Base;
 
 /**
  * Default DI container.
