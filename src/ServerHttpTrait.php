@@ -19,7 +19,7 @@ use Throwable;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
-use Sinpe\Middleware\CallableStrategies\Deferred as DeferredCallable;
+use Sinpe\Middleware\CallableDeferred;
 use Sinpe\Middleware\MiddlewareAwareTrait;
 use Sinpe\Route\RouteInterface;
 use Sinpe\Route\RouterInterface;
@@ -83,7 +83,7 @@ trait ServerHttpTrait
      */
     public function before($callable)
     {
-        return $this->pushToBefore(new DeferredCallable($callable, $this->container));
+        return $this->pushToBefore(new CallableDeferred($callable, $this->container));
     }
 
     /**
@@ -96,7 +96,7 @@ trait ServerHttpTrait
      */
     public function after($callable)
     {
-        return $this->pushToAfter(new DeferredCallable($callable, $this->container));
+        return $this->pushToAfter(new CallableDeferred($callable, $this->container));
     }
 
     /**

@@ -125,7 +125,7 @@ class Server implements ServerInterface
      */
     protected function setSetting(string $key, $value)
     {
-        $this->container->get('setting')->set($key, $value);
+        $this->container->get('setting')->put($key, $value);
     }
     
     /**
