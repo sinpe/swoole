@@ -51,8 +51,8 @@ class DefaultServicesProvider implements ProviderInterface
 
                 $routerCacheFile = false;
 
-                if (isset($container->get('settings')['routerCacheFile'])) {
-                    $routerCacheFile = $container->get('settings')['routerCacheFile'];
+                if (isset($container->get('setting')['routerCacheFile'])) {
+                    $routerCacheFile = $container->get('setting')['routerCacheFile'];
                 }
 
                 $router = (new Router($container))->setCacheFile($routerCacheFile);
@@ -93,7 +93,7 @@ class DefaultServicesProvider implements ProviderInterface
              * @return callable
              */
             $container['phpErrorHandler'] = function ($container) {
-                return new PhpError($container->get('settings')['displayErrorDetails']);
+                return new PhpError($container->get('setting')['displayErrorDetails']);
             };
         }
 
@@ -115,7 +115,7 @@ class DefaultServicesProvider implements ProviderInterface
              */
             $container['errorHandler'] = function ($container) {
                 return new Error(
-                    $container->get('settings')['displayErrorDetails']
+                    $container->get('setting')['displayErrorDetails']
                 );
             };
         }

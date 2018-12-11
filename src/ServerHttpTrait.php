@@ -214,7 +214,7 @@ trait ServerHttpTrait
         }
 
         if (is_callable([$route, 'setOutputBuffering'])) {
-            $route->setOutputBuffering($container->get('settings')['outputBuffering']);
+            $route->setOutputBuffering($container->get('setting')['outputBuffering']);
         }
 
         return $route;
@@ -311,7 +311,7 @@ trait ServerHttpTrait
 
                 if (!empty($output) && $response->getBody()->isWritable()) {
 
-                    $outputBuffering = $this->container->get('settings')['outputBuffering'];
+                    $outputBuffering = $this->container->get('setting')['outputBuffering'];
 
                     if ($outputBuffering === 'prepend') {
                         // prepend output buffer content
@@ -454,7 +454,7 @@ trait ServerHttpTrait
                 $body->rewind();
             }
 
-            $settings = $this->container->get('settings');
+            $settings = $this->container->get('setting');
 
             $chunkSize = $settings['responseChunkSize'];
 
@@ -629,8 +629,8 @@ trait ServerHttpTrait
         $container = $this->container;
 
         // Add Content-Length header if `addContentLengthHeader` setting is set
-        if (isset($container->get('settings')['addContentLengthHeader']) &&
-            $container->get('settings')['addContentLengthHeader'] == true) {
+        if (isset($container->get('setting')['addContentLengthHeader']) &&
+            $container->get('setting')['addContentLengthHeader'] == true) {
             if (ob_get_length() > 0) {
                 throw new RuntimeException("Unexpected data in output buffer. " .
                     "Maybe you have characters before an opening <?php tag?");

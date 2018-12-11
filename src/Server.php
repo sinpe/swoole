@@ -21,8 +21,6 @@ use Psr\Container\ContainerInterface;
 use Sinpe\Event\EventManager;
 use Sinpe\Event\EventManagerInterface;
 
-// use Sinpe\Swoole\LogAwareTrait;
-
 /**
  * App
  *
@@ -36,8 +34,6 @@ use Sinpe\Event\EventManagerInterface;
  */
 class Server implements ServerInterface
 {
-    // use LogAwareTrait;
-
     const TYPE_SERVER = 1;
     const TYPE_HTTP = 2;
     const TYPE_WEB_SOCKET = 3;
@@ -103,6 +99,8 @@ class Server implements ServerInterface
             );
         }
 
+        $container->set('setting', new Setting());
+
         $this->container = $container;
         $this->eventManager = $this->generateEventManager();
         
@@ -120,6 +118,16 @@ class Server implements ServerInterface
         $this->isStart = true;
     }
 
+    /**
+     * 设置、修改默认设置项的值
+     *
+     * @return void
+     */
+    protected function setSetting(string $key, $value)
+    {
+        $this->container->get('setting')->set($key, $value);
+    }
+    
     /**
      * Server Type
      *
@@ -181,9 +189,7 @@ class Server implements ServerInterface
      */
     protected function generateContainer()
     {
-        $container = new Container();
-
-        return $container;
+        return Container::getInstance();
     }
 
     /**

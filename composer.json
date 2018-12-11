@@ -18,7 +18,7 @@
         "long/support": "@dev",
         "long/route": "dev-master",
         "long/middleware": "dev-master",
-	"long/event": "dev-master",
+	    "long/event": "dev-master",
         "psr/log": "^1.0",
         "long/container": "dev-master"
     },

@@ -10,8 +10,6 @@
 
 namespace Sinpe\Swoole;
 
-use Illuminate\Support\Collection;
-
 use Sinpe\Container\Container as Base;
 
 /**
@@ -28,7 +26,6 @@ use Sinpe\Container\Container as Base;
  *  - notAllowedHandler: a callable with the signature: function($request, $response, $allowedHttpMethods)
  *  - callableResolver: an instance of \Sinpe\Middleware\CallableResolverInterface
  *
- * @property-read array settings
  * @property-read \Swoole\Http\EnvironmentInterface environment
  * @property-read \Psr\Http\Message\ServerRequestInterface request
  * @property-read \Psr\Http\Message\ResponseInterface response
@@ -40,33 +37,6 @@ use Sinpe\Container\Container as Base;
 class Container extends Base
 {
     /**
-     * Default settings
-     *
-     * @var array
-     */
-    private $defaultSettings = [
-        'responseChunkSize' => 4096,
-        'outputBuffering' => 'append',
-        'displayErrorDetails' => false,
-        'addContentLengthHeader' => true,
-        'routerCacheFile' => false,
-    ];
-
-    /**
-     * Create new container
-     *
-     * @param array $values The parameters or objects.
-     */
-    public function __construct(array $values = [])
-    {
-        parent::__construct($values);
-
-        $userSettings = isset($values['settings']) ? $values['settings'] : [];
-
-        $this->registerDefaultServices($userSettings);
-    }
-    
-    /**
      * This function registers the default services that needs to work.
      *
      * All services are shared - that is, they are registered such that the
@@ -76,20 +46,8 @@ class Container extends Base
      *
      * @return void
      */
-    protected function registerDefaultServices($userSettings)
+    protected function registerDefaults()
     {
-        $defaultSettings = $this->defaultSettings;
-
-        /**
-         * This service MUST return an array or an
-         * instance of \ArrayAccess.
-         *
-         * @return array|\ArrayAccess
-         */
-        $this['settings'] = function () use ($userSettings, $defaultSettings) {
-            return new Collection(array_merge($defaultSettings, $userSettings));
-        };
-
         $this->register(new DefaultServicesProvider());
     }
 
